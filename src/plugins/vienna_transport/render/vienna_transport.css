@@ -1,0 +1,53 @@
+.vienna-transport {
+    padding: 10px;
+    font-family: sans-serif;
+}
+
+.vienna-transport h1 {
+    margin: 0 0 10px 0;
+    font-size: 1.5em;
+}
+
+.updated {
+    color: gray;
+    font-size: 0.9em;
+    margin: 0 0 20px 0;
+}
+
+.stop {
+    margin-bottom: 20px;
+}
+
+.stop-name {
+    margin: 0 0 10px 0;
+    font-size: 1.2em;
+}
+
+.line {
+    margin-left: 10px;
+    margin-bottom: 10px;
+}
+
+.line-name {
+    margin: 0 0 5px 0;
+    color: blue;
+    font-size: 1em;
+}
+
+.direction {
+    margin-left: 10px;
+    margin-bottom: 3px;
+}
+
+.direction-name {
+    font-weight: normal;
+}
+
+.times {
+    font-weight: bold;
+}
+
+.no-lines, .no-data {
+    color: red;
+    font-style: italic;
+}

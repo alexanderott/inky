@@ -2,7 +2,6 @@ import requests
 import json
 import logging
 from datetime import datetime
-from PIL import Image, ImageDraw, ImageFont
 from plugins.base_plugin.base_plugin import BasePlugin
 
 logger = logging.getLogger(__name__)
@@ -18,29 +17,35 @@ class ViennaTransport(BasePlugin):
         """Generate an image showing departure times for Vienna public transport."""
         try:
             # Get display dimensions
-            width = device_config.get_display_width()
-            height = device_config.get_display_height()
-            
-            # Create image
-            image = Image.new('RGB', (width, height), 'white')
-            draw = ImageDraw.Draw(image)
+            dimensions = device_config.get_resolution()
+            if device_config.get_config("orientation") == "vertical":
+                dimensions = dimensions[::-1]
             
             # Get stops configuration
             stops_config = settings.get('stops', {})
             if not stops_config:
-                return self._create_error_image(width, height, "No stops configured")
+                raise RuntimeError("No stops configured")
             
             # Fetch departure data for all stops
             departure_data = self._fetch_departure_data(stops_config)
             
-            # Render the departure information
-            self._render_departures(draw, departure_data, width, height)
+            # Prepare template parameters
+            template_params = {
+                'departure_data': departure_data,
+                'current_time': datetime.now().strftime("%H:%M"),
+                'plugin_settings': settings
+            }
+            
+            # Render using HTML template
+            image = self.render_image(dimensions, "vienna_transport.html", "vienna_transport.css", template_params)
+            if not image:
+                raise RuntimeError("Failed to render image from template")
             
             return image
             
         except Exception as e:
             logger.error(f"Error generating Vienna transport image: {e}")
-            return self._create_error_image(width or 800, height or 600, f"Error: {str(e)}")
+            raise RuntimeError(f"Error: {str(e)}")
     
     def _fetch_departure_data(self, stops_config):
         """Fetch departure data for all configured stops."""
@@ -135,71 +140,3 @@ class ViennaTransport(BasePlugin):
         
         return stop_data
     
-    def _render_departures(self, draw, departure_data, width, height):
-        """Render departure information on the image."""
-        try:
-            # Use system fonts
-            title_font = ImageFont.load_default()
-            normal_font = ImageFont.load_default()
-            
-            y_pos = 10
-            line_height = 20
-            
-            # Title
-            draw.text((10, y_pos), "Vienna Public Transport", fill='black', font=title_font)
-            y_pos += line_height * 2
-            
-            # Current time
-            current_time = datetime.now().strftime("%H:%M")
-            draw.text((10, y_pos), f"Updated: {current_time}", fill='gray', font=normal_font)
-            y_pos += line_height * 2
-            
-            # Render each stop
-            for stop_data in departure_data:
-                if y_pos > height - 50:  # Check if we're running out of space
-                    break
-                
-                # Stop name
-                draw.text((10, y_pos), f"🚏 {stop_data['name']}", fill='black', font=title_font)
-                y_pos += line_height + 5
-                
-                # Lines and departures
-                for line_name, directions in stop_data['lines'].items():
-                    if y_pos > height - 30:
-                        break
-                    
-                    # Line name
-                    draw.text((20, y_pos), f"Line {line_name}:", fill='blue', font=normal_font)
-                    y_pos += line_height
-                    
-                    # Directions
-                    for direction, times in directions.items():
-                        if y_pos > height - 20:
-                            break
-                        
-                        times_str = ", ".join(times) if times else "No departures"
-                        direction_short = direction[:25] + "..." if len(direction) > 25 else direction
-                        
-                        draw.text((30, y_pos), f"→ {direction_short}: {times_str}", fill='black', font=normal_font)
-                        y_pos += line_height
-                
-                y_pos += 5  # Space between stops
-            
-            # If no data
-            if not departure_data:
-                draw.text((10, height//2), "No departure data available", fill='red', font=title_font)
-                
-        except Exception as e:
-            logger.error(f"Error rendering departures: {e}")
-            draw.text((10, 10), f"Render error: {str(e)}", fill='red', font=normal_font)
-    
-    def _create_error_image(self, width, height, error_message):
-        """Create an error image with the given message."""
-        image = Image.new('RGB', (width, height), 'white')
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.load_default()
-        
-        draw.text((10, 10), "Vienna Transport Error", fill='red', font=font)
-        draw.text((10, 40), error_message, fill='black', font=font)
-        
-        return image
