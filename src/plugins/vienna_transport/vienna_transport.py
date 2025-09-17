@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from plugins.base_plugin.base_plugin import BasePlugin
 from PIL import Image, ImageDraw, ImageFont
-from utils.app_utils import get_fonts
+from utils.app_utils import get_font
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +25,22 @@ class ViennaTransport(BasePlugin):
 
             # Simplified stops configuration - names and directions will be fetched from API
             stops_config = {
-                'barichgasse': {
+                'Barichgasse': {
                     'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
                     'lines': '74A'  # Optional filter for specific lines
-                }
+                },
+                'Rochusgasse': {
+                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
+                    'lines': '74A'  # Optional filter for specific lines
+                },
+                'Neulinggasse': {
+                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
+                    'lines': '74A'  # Optional filter for specific lines
+                },
+                'Eslarngasse': {
+                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
+                    'lines': '74A'  # Optional filter for specific lines
+                },
             }
 
             # Fetch departure data for all stops
@@ -203,6 +215,20 @@ class ViennaTransport(BasePlugin):
                 combined_data['lines'][line_name][direction].sort(key=sort_key)
                 combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:2]
 
+    def _draw_rounded_rectangle(self, draw, bounds, radius, fill=None, outline=None):
+        """Draw a rounded rectangle using PIL primitives."""
+        x1, y1, x2, y2 = bounds
+
+        # Draw the main rectangle (without corners)
+        draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill, outline=outline)
+        draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill, outline=outline)
+
+        # Draw the four rounded corners
+        draw.pieslice([x1, y1, x1 + 2*radius, y1 + 2*radius], 180, 270, fill=fill, outline=outline)
+        draw.pieslice([x2 - 2*radius, y1, x2, y1 + 2*radius], 270, 360, fill=fill, outline=outline)
+        draw.pieslice([x1, y2 - 2*radius, x1 + 2*radius, y2], 90, 180, fill=fill, outline=outline)
+        draw.pieslice([x2 - 2*radius, y2 - 2*radius, x2, y2], 0, 90, fill=fill, outline=outline)
+
     def _draw_transport_layout(self, dimensions, departure_data):
         """Draw the transport layout manually using PIL."""
         width, height = dimensions
@@ -211,15 +237,21 @@ class ViennaTransport(BasePlugin):
         image = Image.new('RGB', (width, height), 'white')
         draw = ImageDraw.Draw(image)
 
-        # Get available fonts
-        fonts = get_fonts()
-
-        # Define font sizes
+        # Define font sizes and load fonts
         try:
-            line_name_font = ImageFont.truetype(fonts.get('bold', fonts.get('default')), 28)
-            direction_font = ImageFont.truetype(fonts.get('default'), 18)
-            time_font = ImageFont.truetype(fonts.get('bold', fonts.get('default')), 16)
-        except:
+            line_name_font = get_font("Jost", 42, "bold")  # Large bold font for line name
+            direction_font = get_font("Jost", 28, "normal")  # Larger font for directions
+            time_font = get_font("Jost", 16, "bold")  # Bold font for times
+
+            # Fallback to default fonts if get_font returns None
+            if line_name_font is None:
+                line_name_font = ImageFont.load_default()
+            if direction_font is None:
+                direction_font = ImageFont.load_default()
+            if time_font is None:
+                time_font = ImageFont.load_default()
+        except Exception as e:
+            logger.error(f"Error loading fonts: {e}")
             line_name_font = ImageFont.load_default()
             direction_font = ImageFont.load_default()
             time_font = ImageFont.load_default()
@@ -252,9 +284,10 @@ class ViennaTransport(BasePlugin):
                 square_x = margin
                 square_y = current_y + (row_height - line_square_size) // 2
 
-                # Draw square background
-                draw.rectangle([square_x, square_y, square_x + line_square_size, square_y + line_square_size],
-                             fill=line_square_bg)
+                # Draw rounded square background
+                self._draw_rounded_rectangle(draw,
+                                           [square_x, square_y, square_x + line_square_size, square_y + line_square_size],
+                                           radius=8, fill=line_square_bg)
 
                 # Draw line name in center of square
                 text_bbox = draw.textbbox((0, 0), line_name, font=line_name_font)
