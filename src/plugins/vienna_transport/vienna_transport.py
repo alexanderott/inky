@@ -30,16 +30,16 @@ class ViennaTransport(BasePlugin):
                     'lines': '74A'  # Optional filter for specific lines
                 },
                 'Rochusgasse': {
-                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
-                    'lines': '74A'  # Optional filter for specific lines
-                },
-                'Neulinggasse': {
-                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
-                    'lines': '74A'  # Optional filter for specific lines
+                    'rbl_numbers': ['4903', '4914'],  # Ottakring and Simmering
+                    'lines': 'U3'  # Optional filter for specific lines
                 },
                 'Eslarngasse': {
-                    'rbl_numbers': ['266', '281'],  # Stubentor and St. Marx
-                    'lines': '74A'  # Optional filter for specific lines
+                    'rbl_numbers': ['2502'],  # Lusthaus
+                    'lines': '77A'  # Optional filter for specific lines
+                },
+                'Hintzerstraße': {
+                    'rbl_numbers': ['254'],  # Karlsplatz and Wittelsbachstraße
+                    'lines': '4A'  # Optional filter for specific lines
                 },
             }
 
@@ -239,7 +239,7 @@ class ViennaTransport(BasePlugin):
 
         # Define font sizes and load fonts
         try:
-            line_name_font = get_font("Jost", 42, "bold")  # Large bold font for line name
+            line_name_font = get_font("Jost", 20, "bold")  # Smaller bold font for line name
             direction_font = get_font("Jost", 28, "normal")  # Larger font for directions
             time_font = get_font("Jost", 16, "bold")  # Bold font for times
 
@@ -294,7 +294,7 @@ class ViennaTransport(BasePlugin):
                 text_width = text_bbox[2] - text_bbox[0]
                 text_height = text_bbox[3] - text_bbox[1]
                 text_x = square_x + (line_square_size - text_width) // 2
-                text_y = square_y + (line_square_size - text_height) // 2
+                text_y = square_y + (line_square_size - text_height) // 2 - text_bbox[1]
                 draw.text((text_x, text_y), line_name, fill='white', font=line_name_font)
 
                 # Draw directions area starting after the gap
