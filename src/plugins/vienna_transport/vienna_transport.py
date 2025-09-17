@@ -3,6 +3,8 @@ import json
 import logging
 from datetime import datetime
 from plugins.base_plugin.base_plugin import BasePlugin
+from PIL import Image, ImageDraw, ImageFont
+from utils.app_utils import get_fonts
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +22,7 @@ class ViennaTransport(BasePlugin):
             dimensions = device_config.get_resolution()
             if device_config.get_config("orientation") == "vertical":
                 dimensions = dimensions[::-1]
-            
+
             # Simplified stops configuration - names and directions will be fetched from API
             stops_config = {
                 'barichgasse': {
@@ -28,24 +30,17 @@ class ViennaTransport(BasePlugin):
                     'lines': '74A'  # Optional filter for specific lines
                 }
             }
-            
+
             # Fetch departure data for all stops
             departure_data = self._fetch_departure_data(stops_config)
-            
-            # Prepare template parameters
-            template_params = {
-                'departure_data': departure_data,
-                'current_time': datetime.now().strftime("%H:%M"),
-                'plugin_settings': settings
-            }
-            
-            # Render using HTML template
-            image = self.render_image(dimensions, "vienna_transport.html", "vienna_transport.css", template_params)
+
+            # Create image using PIL instead of HTML rendering
+            image = self._draw_transport_layout(dimensions, departure_data)
             if not image:
-                raise RuntimeError("Failed to render image from template")
-            
+                raise RuntimeError("Failed to draw transport layout")
+
             return image
-            
+
         except Exception as e:
             logger.error(f"Error generating Vienna transport image: {e}")
             raise RuntimeError(f"Error: {str(e)}")
@@ -200,4 +195,117 @@ class ViennaTransport(BasePlugin):
                 
                 combined_data['lines'][line_name][direction].sort(key=sort_key)
                 combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:2]
+
+    def _draw_transport_layout(self, dimensions, departure_data):
+        """Draw the transport layout manually using PIL."""
+        width, height = dimensions
+
+        # Create image with white background
+        image = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(image)
+
+        # Get available fonts
+        fonts = get_fonts()
+
+        # Define font sizes
+        try:
+            line_name_font = ImageFont.truetype(fonts.get('bold', fonts.get('default')), 28)
+            direction_font = ImageFont.truetype(fonts.get('default'), 18)
+            time_font = ImageFont.truetype(fonts.get('bold', fonts.get('default')), 16)
+        except:
+            line_name_font = ImageFont.load_default()
+            direction_font = ImageFont.load_default()
+            time_font = ImageFont.load_default()
+
+        # Colors
+        line_square_bg = '#1976D2'  # Blue for line squares
+        text_color = '#000000'      # Black text
+        border_color = '#CCCCCC'    # Light gray borders
+
+        # Layout constants
+        margin = 10
+        line_square_size = 60
+        gap_after_square = 15
+        row_height = 80
+        direction_spacing = 25
+
+        current_y = margin
+
+        # Draw each stop's data
+        for stop in departure_data:
+            if not stop.get('lines'):
+                continue
+
+            # Draw each line for this stop
+            for line_name, directions in stop['lines'].items():
+                if current_y + row_height > height - margin:
+                    break  # Not enough space for more rows
+
+                # Draw line square on the left
+                square_x = margin
+                square_y = current_y + (row_height - line_square_size) // 2
+
+                # Draw square background
+                draw.rectangle([square_x, square_y, square_x + line_square_size, square_y + line_square_size],
+                             fill=line_square_bg)
+
+                # Draw line name in center of square
+                text_bbox = draw.textbbox((0, 0), line_name, font=line_name_font)
+                text_width = text_bbox[2] - text_bbox[0]
+                text_height = text_bbox[3] - text_bbox[1]
+                text_x = square_x + (line_square_size - text_width) // 2
+                text_y = square_y + (line_square_size - text_height) // 2
+                draw.text((text_x, text_y), line_name, fill='white', font=line_name_font)
+
+                # Draw directions area starting after the gap
+                directions_x = square_x + line_square_size + gap_after_square
+                directions_y = current_y
+
+                # Draw each direction
+                direction_y_offset = 0
+                for direction, times in directions.items():
+                    if direction_y_offset + direction_spacing > row_height:
+                        break  # Not enough space in this row
+
+                    direction_row_y = directions_y + direction_y_offset + direction_spacing // 2
+
+                    # Draw direction name
+                    draw.text((directions_x, direction_row_y), direction, fill=text_color, font=direction_font)
+
+                    # Calculate position for times (after direction name)
+                    direction_bbox = draw.textbbox((0, 0), direction, font=direction_font)
+                    direction_width = direction_bbox[2] - direction_bbox[0]
+                    times_x = directions_x + direction_width + 20
+
+                    # Draw departure times
+                    if times and len(times) > 0:
+                        # First time
+                        first_time = times[0] if times[0] else "?"
+                        draw.text((times_x, direction_row_y), first_time, fill=text_color, font=time_font)
+
+                        # Calculate position for vertical separator and second time
+                        first_time_bbox = draw.textbbox((0, 0), first_time, font=time_font)
+                        first_time_width = first_time_bbox[2] - first_time_bbox[0]
+                        separator_x = times_x + first_time_width + 15
+
+                        # Draw vertical separator
+                        draw.line([separator_x, direction_row_y, separator_x, direction_row_y + 15],
+                                fill=border_color, width=1)
+
+                        # Second time (if available)
+                        if len(times) > 1:
+                            second_time = times[1] if times[1] else "?"
+                            second_time_x = separator_x + 15
+                            draw.text((second_time_x, direction_row_y), second_time, fill=text_color, font=time_font)
+
+                    direction_y_offset += direction_spacing
+
+                # Draw horizontal border after this line row
+                current_y += row_height
+                if current_y < height - margin:
+                    draw.line([margin, current_y, width - margin, current_y],
+                            fill=border_color, width=1)
+                current_y += 1  # Small gap after border
+
+        return image
     
