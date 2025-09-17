@@ -82,8 +82,15 @@ class ViennaTransport(BasePlugin):
                         url = f"{self.api_base_url}?rbl={rbl_number}&sender=vienna_transport_plugin"
                         response = requests.get(url, timeout=10)
                         response.raise_for_status()
-                        
+
                         data = response.json()
+
+                        # Log the API response to console
+                        print(f"\n=== Vienna Transport API Response for RBL {rbl_number} ===")
+                        print(f"URL: {url}")
+                        print(f"Response JSON:")
+                        print(json.dumps(data, indent=2, ensure_ascii=False))
+                        print("=" * 60)
                         
                         # Parse response for this specific RBL
                         rbl_data = self._parse_api_response(data, line_filter)
@@ -145,7 +152,7 @@ class ViennaTransport(BasePlugin):
                                 
                                 for departure in departures[:10]:  # Limit to first 10 departures
                                     # Get direction from API
-                                    direction = departure.get('vehicle', {}).get('direction', 'Unknown Direction')
+                                    direction = departure.get('vehicle', {}).get('towards', 'Unknown Direction')
                                     countdown = departure.get('departureTime', {}).get('countdown', None)
                                     
                                     if direction not in stop_data['lines'][line_name]:
