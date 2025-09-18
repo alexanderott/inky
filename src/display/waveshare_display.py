@@ -111,25 +111,62 @@ class WaveshareDisplay(AbstractDisplay):
         self.epd_display_init()
 
         # Some displays may need a different init for partial refresh
-        if partial_refresh and hasattr(self.epd_display, 'Init_Partial'):
-            logger.info("PARTIAL_INIT: Using specialized Init_Partial initialization")
-            self.epd_display.Init_Partial()
-        elif partial_refresh and hasattr(self.epd_display, 'init_partial'):
-            logger.info("PARTIAL_INIT: Using specialized init_partial initialization")
-            self.epd_display.init_partial()
-        elif partial_refresh:
-            logger.info("PARTIAL_INIT: No specialized partial init found, using standard init")
+        if partial_refresh:
+            if hasattr(self.epd_display, 'Init_Fast'):
+                logger.info("PARTIAL_INIT: Using Init_Fast initialization for 7.5\" v2 display")
+                self.epd_display.Init_Fast()
+            elif hasattr(self.epd_display, 'init_fast'):
+                logger.info("PARTIAL_INIT: Using init_fast initialization for 7.5\" v2 display")
+                self.epd_display.init_fast()
+            elif hasattr(self.epd_display, 'Init_Partial'):
+                logger.info("PARTIAL_INIT: Using specialized Init_Partial initialization")
+                self.epd_display.Init_Partial()
+            elif hasattr(self.epd_display, 'init_partial'):
+                logger.info("PARTIAL_INIT: Using specialized init_partial initialization")
+                self.epd_display.init_partial()
+            else:
+                logger.info("PARTIAL_INIT: No specialized partial init found, using standard init")
 
         if partial_refresh:
             # Try to use partial refresh if the display supports it
+            # Log all available methods for debugging
+            all_methods = [method for method in dir(self.epd_display) if not method.startswith('_')]
+            logger.info(f"PARTIAL_DEBUG: All available methods on {type(self.epd_display).__name__}: {', '.join(all_methods)}")
+
             partial_methods = [
-                ('DisplayPartial', 'DisplayPartial'),
-                ('displayPart', 'displayPart'),
-                ('display_partial', 'display_partial'),
+                # Waveshare 7.5" v2 specific methods (epd7in5_V2)
+                ('DisplayPartBaseImage', 'DisplayPartBaseImage'),
+                ('displayPartBaseImage', 'displayPartBaseImage'),
+                ('display_part_base_image', 'display_part_base_image'),
                 ('DisplayPart', 'DisplayPart'),
+                ('displayPart', 'displayPart'),
+                ('display_part', 'display_part'),
+                # Common Waveshare partial refresh methods
+                ('DisplayPartial', 'DisplayPartial'),
+                ('displayPartial', 'displayPartial'),
+                ('display_partial', 'display_partial'),
                 ('PartialUpdate', 'PartialUpdate'),
                 ('partialUpdate', 'partialUpdate'),
-                ('DisplayPartBase', 'DisplayPartBase')
+                ('partial_update', 'partial_update'),
+                ('DisplayPartBase', 'DisplayPartBase'),
+                ('DisplayBaseImage', 'DisplayBaseImage'),
+                ('displayBase', 'displayBase'),
+                ('display_base', 'display_base'),
+                ('DisplayWindow', 'DisplayWindow'),
+                ('displayWindow', 'displayWindow'),
+                ('display_window', 'display_window'),
+                ('PartialDisplay', 'PartialDisplay'),
+                ('partialDisplay', 'partialDisplay'),
+                ('partial_display', 'partial_display'),
+                ('UpdatePartial', 'UpdatePartial'),
+                ('updatePartial', 'updatePartial'),
+                ('update_partial', 'update_partial'),
+                ('DisplayQuick', 'DisplayQuick'),
+                ('displayQuick', 'displayQuick'),
+                ('display_quick', 'display_quick'),
+                ('DisplayFast', 'DisplayFast'),
+                ('displayFast', 'displayFast'),
+                ('display_fast', 'display_fast')
             ]
 
             partial_method_found = False
