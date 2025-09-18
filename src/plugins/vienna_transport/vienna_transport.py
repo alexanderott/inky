@@ -237,11 +237,19 @@ class ViennaTransport(BasePlugin):
         image = Image.new('RGB', (width, height), 'white')
         draw = ImageDraw.Draw(image)
 
+        # Layout constants
+        margin = 10
+        line_square_size = 60
+        gap_after_square = 15
+        row_height = 110
+        direction_line_height = 45  # Height between direction lines (increased from 25)
+        direction_font_size = 32  # Font size for direction text (increased from 28)
+
         # Define font sizes and load fonts
         try:
             line_name_font = get_font("Jost", 20, "bold")  # Smaller bold font for line name
-            direction_font = get_font("Jost", 28, "normal")  # Larger font for directions
-            time_font = get_font("Jost", 28, "bold")  # Bold font for times - matches direction font size
+            direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
+            time_font = get_font("Jost", 28, "bold")  # Bold font for times
 
             # Fallback to default fonts if get_font returns None
             if line_name_font is None:
@@ -260,13 +268,6 @@ class ViennaTransport(BasePlugin):
         line_square_bg = '#000000'  # Black for line squares
         text_color = '#000000'      # Black text
         border_color = '#CCCCCC'    # Light gray borders
-
-        # Layout constants
-        margin = 10
-        line_square_size = 60
-        gap_after_square = 15
-        row_height = 110
-        direction_line_height = 45  # Height between direction lines (increased from 25)
 
         current_y = margin
 
