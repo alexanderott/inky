@@ -162,7 +162,7 @@ class ViennaTransport(BasePlugin):
                                 if not isinstance(departures, list):
                                     departures = [departures]
                                 
-                                for departure in departures[:10]:  # Limit to first 10 departures
+                                for departure in departures[:2]:  # Limit to first 2 departures
                                     # Get direction from API
                                     direction = departure.get('vehicle', {}).get('towards', 'Unknown Direction')
                                     countdown = departure.get('departureTime', {}).get('countdown', None)
@@ -182,10 +182,10 @@ class ViennaTransport(BasePlugin):
         except Exception as e:
             logger.error(f"Error parsing API response: {e}")
         
-        # Sort and limit departures per direction to 3
+        # Sort and limit departures per direction to 2
         for line_name in stop_data['lines']:
             for direction in stop_data['lines'][line_name]:
-                stop_data['lines'][line_name][direction] = stop_data['lines'][line_name][direction][:3]
+                stop_data['lines'][line_name][direction] = stop_data['lines'][line_name][direction][:2]
         
         return stop_data
     
@@ -213,7 +213,7 @@ class ViennaTransport(BasePlugin):
                         return 999
 
                 combined_data['lines'][line_name][direction].sort(key=sort_key)
-                combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:3]
+                combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:2]
 
     def _draw_rounded_rectangle(self, draw, bounds, radius, fill=None, outline=None):
         """Draw a rounded rectangle using PIL primitives."""
@@ -242,14 +242,14 @@ class ViennaTransport(BasePlugin):
         line_square_size = 60
         gap_after_square = 15
         row_height = 110
-        direction_line_height = 45  # Height between direction lines (increased from 25)
-        direction_font_size = 32  # Font size for direction text (increased from 28)
+        direction_line_height = 45  # Height between direction lines
+        direction_font_size = 32  # Font size for direction text
 
         # Define font sizes and load fonts
         try:
             line_name_font = get_font("Jost", 20, "bold")  # Smaller bold font for line name
             direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
-            time_font = get_font("Jost", 28, "bold")  # Bold font for times
+            time_font = get_font("Jost", direction_font_size, "bold")  # Bold font for times
 
             # Fallback to default fonts if get_font returns None
             if line_name_font is None:
@@ -320,15 +320,20 @@ class ViennaTransport(BasePlugin):
 
                     # Draw departure times (right-aligned)
                     if times and len(times) > 0:
-                        # Format times with 'min' only on the last one
+                        # Format times with consistent width and proper spacing
                         formatted_times = []
-                        for i, time in enumerate(times[:3]):
+                        times_to_show = times[:2]  # Only show 2 times
+
+                        for i, time in enumerate(times_to_show):
                             if time == "*":
-                                formatted_times.append("*")
-                            elif i == len(times[:3]) - 1:  # Last time gets 'min'
-                                formatted_times.append(f"{time}min")
+                                # For asterisk, use consistent width
+                                formatted_times.append("   *    ")
                             else:
-                                formatted_times.append(time)
+                                # For numbers, use consistent width
+                                if i == len(times_to_show) - 1:  # Last time gets 'min'
+                                    formatted_times.append(f"{time:>3} min")
+                                else:
+                                    formatted_times.append(f"{time:>3}    ")  # Same width as " min"
 
                         # Join times with separators
                         times_text = " | ".join(formatted_times)
