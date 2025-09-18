@@ -43,13 +43,16 @@
                 let intervalInMinutes = Math.floor(pluginCycleIntervalSeconds / 60);
                 let intervalInHours = Math.floor(pluginCycleIntervalSeconds / 3600);
 
-                // Determine which unit to use (minute or hour) based on the interval
-                if (intervalInHours > 0) {
+                // Determine which unit to use (second, minute, or hour) based on the interval
+                if (intervalInHours > 0 && pluginCycleIntervalSeconds % 3600 === 0) {
                     intervalInput.value = intervalInHours;
                     unitSelect.value = "hour";
-                } else {
+                } else if (intervalInMinutes > 0 && pluginCycleIntervalSeconds % 60 === 0) {
                     intervalInput.value = intervalInMinutes;
                     unitSelect.value = "minute";
+                } else {
+                    intervalInput.value = pluginCycleIntervalSeconds;
+                    unitSelect.value = "second";
                 }
             }
         }
@@ -172,6 +175,7 @@
                         <span>Every</span>
                         <input type="number" id="interval" name="interval" class="form-input" required min="1">
                         <select id="unit" name="unit" class="form-input" required>
+                            <option value="second">Second</option>
                             <option value="minute">Minute</option>
                             <option value="hour">Hour</option>
                         </select>

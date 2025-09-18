@@ -39,7 +39,7 @@ def add_plugin():
 
         if refresh_type == "interval":
             unit, interval = refresh_settings.get('unit'), refresh_settings.get("interval")
-            if not unit or unit not in ["minute", "hour", "day"]:
+            if not unit or unit not in ["second", "minute", "hour", "day"]:
                 return jsonify({"error": "Refresh interval unit is required"}), 400
             if not interval:
                 return jsonify({"error": "Refresh interval is required"}), 400

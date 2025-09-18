@@ -4,7 +4,9 @@ logger = logging.getLogger(__name__)
 
 def calculate_seconds(interval, unit):
     seconds = 5 * 60 # default to five minutes
-    if unit == "minute":
+    if unit == "second":
+        seconds = interval
+    elif unit == "minute":
         seconds = interval * 60
     elif unit == "hour":
         seconds = interval * 60 * 60

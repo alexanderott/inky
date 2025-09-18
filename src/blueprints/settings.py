@@ -39,7 +39,7 @@ def save_settings():
         form_data = request.form.to_dict()
 
         unit, interval, time_format = form_data.get('unit'), form_data.get("interval"), form_data.get("timeFormat")
-        if not unit or unit not in ["minute", "hour"]:
+        if not unit or unit not in ["second", "minute", "hour"]:
             return jsonify({"error": "Plugin cycle interval unit is required"}), 400
         if not interval or not interval.isnumeric():
             return jsonify({"error": "Refresh interval is required"}), 400
