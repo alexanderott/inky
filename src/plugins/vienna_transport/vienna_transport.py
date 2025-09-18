@@ -238,16 +238,20 @@ class ViennaTransport(BasePlugin):
         draw = ImageDraw.Draw(image)
 
         # Layout constants
-        margin = 10
-        line_square_size = 60
+        side_padding = 10  # Only left and right padding
+        line_square_size = 80  # Size of the line number squares
+        line_name_font_size = 34  # Font size for line name text inside squares
         gap_after_square = 15
-        row_height = 110
+        # Calculate row height accounting for border gaps between rows
+        border_gaps = 3  # 3 gaps between 4 rows
+        row_height = (height - border_gaps) / 4  # Height allocated for each line row
+        row_content_offset = 10  # Vertical offset to move content up within each row
         direction_line_height = 45  # Height between direction lines
         direction_font_size = 32  # Font size for direction text
 
         # Define font sizes and load fonts
         try:
-            line_name_font = get_font("Jost", 20, "bold")  # Smaller bold font for line name
+            line_name_font = get_font("Jost", line_name_font_size, "bold")  # Bold font for line name
             direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
             time_font = get_font("Jost", direction_font_size, "bold")  # Bold font for times
 
@@ -269,7 +273,7 @@ class ViennaTransport(BasePlugin):
         text_color = '#000000'      # Black text
         border_color = '#CCCCCC'    # Light gray borders
 
-        current_y = margin
+        current_y = 0
 
         # Draw each stop's data
         for stop in departure_data:
@@ -278,11 +282,11 @@ class ViennaTransport(BasePlugin):
 
             # Draw each line for this stop
             for line_name, directions in stop['lines'].items():
-                if current_y + row_height > height - margin:
+                if current_y + row_height > height:
                     break  # Not enough space for more rows
 
                 # Draw line square on the left
-                square_x = margin
+                square_x = side_padding
                 square_y = current_y + (row_height - line_square_size) // 2
 
                 # Draw rounded square background
@@ -300,7 +304,7 @@ class ViennaTransport(BasePlugin):
 
                 # Draw directions area starting after the gap
                 directions_x = square_x + line_square_size + gap_after_square
-                directions_y = current_y
+                directions_y = current_y - row_content_offset
 
                 # Draw each direction
                 direction_y_offset = 0
@@ -341,7 +345,7 @@ class ViennaTransport(BasePlugin):
                         # Calculate right-aligned position
                         times_bbox = draw.textbbox((0, 0), times_text, font=time_font)
                         times_width = times_bbox[2] - times_bbox[0]
-                        right_aligned_x = width - margin - times_width
+                        right_aligned_x = width - side_padding - times_width
 
                         # Draw the times
                         draw.text((right_aligned_x, direction_row_y), times_text, fill=text_color, font=time_font)
@@ -350,8 +354,8 @@ class ViennaTransport(BasePlugin):
 
                 # Draw horizontal border after this line row
                 current_y += row_height
-                if current_y < height - margin:
-                    draw.line([margin, current_y, width - margin, current_y],
+                if current_y < height:
+                    draw.line([side_padding, current_y, width - side_padding, current_y],
                             fill=border_color, width=1)
                 current_y += 1  # Small gap after border
 
