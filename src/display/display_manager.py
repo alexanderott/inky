@@ -82,16 +82,29 @@ class DisplayManager:
         if self.device_config.get_config("inverted_image"): image = image.rotate(180)
         image = apply_image_enhancement(image, self.device_config.get_config("image_settings"))
 
-        # Determine if we should use partial refresh
-        use_partial_refresh = self.partial_refresh_count < self.max_partial_refreshes
+        # Check if partial refresh is disabled in config
+        partial_refresh_disabled = self.device_config.get_config("disable_partial_refresh", default=False)
 
-        if use_partial_refresh:
+        # Determine if we should use partial refresh
+        use_partial_refresh = (not partial_refresh_disabled and
+                             self.partial_refresh_count < self.max_partial_refreshes)
+
+        if partial_refresh_disabled:
+            logger.info("REFRESH_MODE: Full refresh (partial refresh disabled in configuration)")
+        elif use_partial_refresh:
             self.partial_refresh_count += 1
-            logger.info(f"Using partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
+            logger.info(f"REFRESH_MODE: Attempting partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
         else:
             # Time for a full refresh, reset counter
             self.partial_refresh_count = 0
-            logger.info("Using full refresh (partial refresh limit reached)")
+            logger.info("REFRESH_MODE: Full refresh (partial refresh limit reached)")
 
         # Pass to the concrete instance to render to the device.
+        import time
+        refresh_start_time = time.time()
+        logger.info(f"REFRESH_START: Beginning display refresh at {time.strftime('%H:%M:%S')}")
+
         self.display.display_image(image, image_settings, partial_refresh=use_partial_refresh)
+
+        total_refresh_time = time.time() - refresh_start_time
+        logger.info(f"REFRESH_COMPLETE: Display refresh completed in {total_refresh_time:.2f} seconds")

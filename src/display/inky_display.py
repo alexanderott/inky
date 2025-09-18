@@ -55,14 +55,20 @@ class InkyDisplay(AbstractDisplay):
         """
 
         if partial_refresh:
-            logger.info("Displaying image to Inky display (partial refresh requested, but not supported - using full refresh).")
+            logger.info("INKY_PARTIAL_UNSUPPORTED: Partial refresh requested but not supported by Inky display - using full refresh")
         else:
-            logger.info("Displaying image to Inky display (full refresh).")
+            logger.info("INKY_FULL: Performing full refresh on Inky display")
 
         if not image:
             raise ValueError(f"No image provided.")
 
         # Display the image on the Inky display
         # Note: Inky library doesn't support partial refresh, so we always do full refresh
+        import time
+        inky_start_time = time.time()
+        logger.info("INKY_REFRESH_START: Setting image on Inky display")
         self.inky_display.set_image(image)
+        logger.info("INKY_REFRESH_SHOW: Showing image on Inky display")
         self.inky_display.show()
+        inky_refresh_time = time.time() - inky_start_time
+        logger.info(f"INKY_REFRESH_COMPLETE: Inky refresh completed in {inky_refresh_time:.2f} seconds")
