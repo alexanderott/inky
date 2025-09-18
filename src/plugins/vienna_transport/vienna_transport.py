@@ -265,8 +265,8 @@ class ViennaTransport(BasePlugin):
         margin = 10
         line_square_size = 60
         gap_after_square = 15
-        row_height = 100
-        direction_spacing = 25
+        row_height = 110
+        direction_line_height = 45  # Height between direction lines (increased from 25)
 
         current_y = margin
 
@@ -304,10 +304,10 @@ class ViennaTransport(BasePlugin):
                 # Draw each direction
                 direction_y_offset = 0
                 for direction, times in directions.items():
-                    if direction_y_offset + direction_spacing > row_height:
+                    if direction_y_offset + direction_line_height > row_height:
                         break  # Not enough space in this row
 
-                    direction_row_y = directions_y + direction_y_offset + direction_spacing // 2
+                    direction_row_y = directions_y + direction_y_offset + direction_line_height // 2
 
                     # Draw direction name
                     draw.text((directions_x, direction_row_y), direction, fill=text_color, font=direction_font)
@@ -340,7 +340,7 @@ class ViennaTransport(BasePlugin):
                         # Draw the times
                         draw.text((right_aligned_x, direction_row_y), times_text, fill=text_color, font=time_font)
 
-                    direction_y_offset += direction_spacing
+                    direction_y_offset += direction_line_height
 
                 # Draw horizontal border after this line row
                 current_y += row_height
