@@ -166,26 +166,26 @@ class ViennaTransport(BasePlugin):
                                     # Get direction from API
                                     direction = departure.get('vehicle', {}).get('towards', 'Unknown Direction')
                                     countdown = departure.get('departureTime', {}).get('countdown', None)
-                                    
+
                                     if direction not in stop_data['lines'][line_name]:
                                         stop_data['lines'][line_name][direction] = []
-                                    
-                                    # Add countdown time (convert to display format)
+
+                                    # Add countdown time (convert to display format without min suffix)
                                     if countdown is not None:
                                         if countdown == 0:
                                             time_display = "*"
                                         else:
-                                            time_display = f"{countdown}min"
-                                        
+                                            time_display = str(countdown)
+
                                         stop_data['lines'][line_name][direction].append(time_display)
         
         except Exception as e:
             logger.error(f"Error parsing API response: {e}")
         
-        # Sort and limit departures per direction to 2
+        # Sort and limit departures per direction to 3
         for line_name in stop_data['lines']:
             for direction in stop_data['lines'][line_name]:
-                stop_data['lines'][line_name][direction] = stop_data['lines'][line_name][direction][:2]
+                stop_data['lines'][line_name][direction] = stop_data['lines'][line_name][direction][:3]
         
         return stop_data
     
@@ -208,12 +208,12 @@ class ViennaTransport(BasePlugin):
                     if time_str == "*":
                         return 0
                     try:
-                        return int(time_str.replace("min", ""))
+                        return int(time_str)
                     except:
                         return 999
-                
+
                 combined_data['lines'][line_name][direction].sort(key=sort_key)
-                combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:2]
+                combined_data['lines'][line_name][direction] = combined_data['lines'][line_name][direction][:3]
 
     def _draw_rounded_rectangle(self, draw, bounds, radius, fill=None, outline=None):
         """Draw a rounded rectangle using PIL primitives."""
@@ -317,26 +317,28 @@ class ViennaTransport(BasePlugin):
                     direction_width = direction_bbox[2] - direction_bbox[0]
                     times_x = directions_x + direction_width + 20
 
-                    # Draw departure times
+                    # Draw departure times (right-aligned)
                     if times and len(times) > 0:
-                        # First time
-                        first_time = times[0] if times[0] else "?"
-                        draw.text((times_x, direction_row_y), first_time, fill=text_color, font=time_font)
+                        # Format times with 'min' only on the last one
+                        formatted_times = []
+                        for i, time in enumerate(times[:3]):
+                            if time == "*":
+                                formatted_times.append("*")
+                            elif i == len(times[:3]) - 1:  # Last time gets 'min'
+                                formatted_times.append(f"{time}min")
+                            else:
+                                formatted_times.append(time)
 
-                        # Calculate position for vertical separator and second time
-                        first_time_bbox = draw.textbbox((0, 0), first_time, font=time_font)
-                        first_time_width = first_time_bbox[2] - first_time_bbox[0]
-                        separator_x = times_x + first_time_width + 15
+                        # Join times with separators
+                        times_text = " | ".join(formatted_times)
 
-                        # Draw vertical separator
-                        draw.line([separator_x, direction_row_y, separator_x, direction_row_y + 15],
-                                fill=border_color, width=1)
+                        # Calculate right-aligned position
+                        times_bbox = draw.textbbox((0, 0), times_text, font=time_font)
+                        times_width = times_bbox[2] - times_bbox[0]
+                        right_aligned_x = width - margin - times_width
 
-                        # Second time (if available)
-                        if len(times) > 1:
-                            second_time = times[1] if times[1] else "?"
-                            second_time_x = separator_x + 15
-                            draw.text((second_time_x, direction_row_y), second_time, fill=text_color, font=time_font)
+                        # Draw the times
+                        draw.text((right_aligned_x, direction_row_y), times_text, fill=text_color, font=time_font)
 
                     direction_y_offset += direction_spacing
 
