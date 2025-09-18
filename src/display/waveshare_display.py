@@ -185,7 +185,15 @@ class WaveshareDisplay(AbstractDisplay):
                         start_time = time.time()
                         method = getattr(self.epd_display, method_name)
                         logger.info(f"PARTIAL_EXECUTING: Calling {log_name} method...")
-                        method(self.epd_display.getbuffer(image))
+
+                        # Handle display_Partial which requires coordinates
+                        if method_name == 'display_Partial':
+                            # Refresh the entire display area
+                            method(self.epd_display.getbuffer(image), 0, 0, self.epd_display.width, self.epd_display.height)
+                        else:
+                            # Standard method call
+                            method(self.epd_display.getbuffer(image))
+
                         refresh_time = time.time() - start_time
                         logger.info(f"PARTIAL_SUCCESS: {log_name} completed in {refresh_time:.2f} seconds")
                         partial_method_found = True
