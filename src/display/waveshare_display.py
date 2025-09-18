@@ -112,7 +112,10 @@ class WaveshareDisplay(AbstractDisplay):
 
         # Some displays may need a different init for partial refresh
         if partial_refresh:
-            if hasattr(self.epd_display, 'Init_Fast'):
+            if hasattr(self.epd_display, 'init_part'):
+                logger.info("PARTIAL_INIT: Using init_part initialization (detected on your 7.5\" v2 display)")
+                self.epd_display.init_part()
+            elif hasattr(self.epd_display, 'Init_Fast'):
                 logger.info("PARTIAL_INIT: Using Init_Fast initialization for 7.5\" v2 display")
                 self.epd_display.Init_Fast()
             elif hasattr(self.epd_display, 'init_fast'):
@@ -134,6 +137,8 @@ class WaveshareDisplay(AbstractDisplay):
             logger.info(f"PARTIAL_DEBUG: All available methods on {type(self.epd_display).__name__}: {', '.join(all_methods)}")
 
             partial_methods = [
+                # Your specific 7.5" v2 display methods (detected from your device)
+                ('display_Partial', 'display_Partial'),
                 # Waveshare 7.5" v2 specific methods (epd7in5_V2)
                 ('DisplayPartBaseImage', 'DisplayPartBaseImage'),
                 ('displayPartBaseImage', 'displayPartBaseImage'),
