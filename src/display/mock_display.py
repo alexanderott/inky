@@ -20,10 +20,14 @@ class MockDisplay(AbstractDisplay):
         """Initialize mock display (no-op for development)."""
         logger.info(f"Mock display initialized: {self.width}x{self.height}")
         
-    def display_image(self, image, image_settings=[]):
+    def display_image(self, image, image_settings=[], partial_refresh=False):
+        refresh_type = "partial" if partial_refresh else "full"
+        logger.info(f"Mock display: displaying image ({refresh_type} refresh)")
+
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = os.path.join(self.output_dir, f"display_{timestamp}.png")
+        filename = f"display_{timestamp}_{refresh_type}.png"
+        filepath = os.path.join(self.output_dir, filename)
         image.save(filepath, "PNG")
-        
+
         # Also save as latest.png for convenience
         image.save(os.path.join(self.output_dir, 'latest.png'), "PNG")

@@ -37,26 +37,32 @@ class InkyDisplay(AbstractDisplay):
                 [int(self.inky_display.width), int(self.inky_display.height)], 
                 write=True)
 
-    def display_image(self, image, image_settings=[]):
-        
+    def display_image(self, image, image_settings=[], partial_refresh=False):
+
         """
         Displays the provided image on the Inky display.
 
-        The image has been processed by adjusting orientation and resizing 
+        The image has been processed by adjusting orientation and resizing
         before being sent to the display.
 
         Args:
             image (PIL.Image): The image to be displayed.
             image_settings (list, optional): Additional settings to modify image rendering.
+            partial_refresh (bool, optional): Whether to use partial refresh if supported. Defaults to False.
 
         Raises:
             ValueError: If no image is provided.
         """
 
-        logger.info("Displaying image to Inky display.")
+        if partial_refresh:
+            logger.info("Displaying image to Inky display (partial refresh requested, but not supported - using full refresh).")
+        else:
+            logger.info("Displaying image to Inky display (full refresh).")
+
         if not image:
             raise ValueError(f"No image provided.")
 
         # Display the image on the Inky display
+        # Note: Inky library doesn't support partial refresh, so we always do full refresh
         self.inky_display.set_image(image)
         self.inky_display.show()

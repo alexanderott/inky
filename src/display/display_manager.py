@@ -25,7 +25,7 @@ class DisplayManager:
     def __init__(self, device_config):
 
         """
-        Initializes the display manager and selects the correct display type 
+        Initializes the display manager and selects the correct display type
         based on the configuration.
 
         Args:
@@ -34,8 +34,10 @@ class DisplayManager:
         Raises:
             ValueError: If an unsupported display type is specified.
         """
-        
+
         self.device_config = device_config
+        self.partial_refresh_count = 0
+        self.max_partial_refreshes = 5
      
         display_type = device_config.get_config("display_type", default="inky")
 
@@ -55,7 +57,7 @@ class DisplayManager:
             raise ValueError(f"Unsupported display type: {display_type}")
 
     def display_image(self, image, image_settings=[]):
-        
+
         """
         Delegates image rendering to the appropriate display instance.
 
@@ -69,7 +71,7 @@ class DisplayManager:
 
         if not hasattr(self, "display"):
             raise ValueError("No valid display instance initialized.")
-        
+
         # Save the image
         logger.info(f"Saving image to {self.device_config.current_image_file}")
         image.save(self.device_config.current_image_file)
@@ -80,5 +82,16 @@ class DisplayManager:
         if self.device_config.get_config("inverted_image"): image = image.rotate(180)
         image = apply_image_enhancement(image, self.device_config.get_config("image_settings"))
 
+        # Determine if we should use partial refresh
+        use_partial_refresh = self.partial_refresh_count < self.max_partial_refreshes
+
+        if use_partial_refresh:
+            self.partial_refresh_count += 1
+            logger.info(f"Using partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
+        else:
+            # Time for a full refresh, reset counter
+            self.partial_refresh_count = 0
+            logger.info("Using full refresh (partial refresh limit reached)")
+
         # Pass to the concrete instance to render to the device.
-        self.display.display_image(image, image_settings)
+        self.display.display_image(image, image_settings, partial_refresh=use_partial_refresh)
