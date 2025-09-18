@@ -241,7 +241,7 @@ class ViennaTransport(BasePlugin):
         try:
             line_name_font = get_font("Jost", 20, "bold")  # Smaller bold font for line name
             direction_font = get_font("Jost", 28, "normal")  # Larger font for directions
-            time_font = get_font("Jost", 16, "bold")  # Bold font for times
+            time_font = get_font("Jost", 28, "bold")  # Bold font for times - matches direction font size
 
             # Fallback to default fonts if get_font returns None
             if line_name_font is None:
@@ -257,7 +257,7 @@ class ViennaTransport(BasePlugin):
             time_font = ImageFont.load_default()
 
         # Colors
-        line_square_bg = '#1976D2'  # Blue for line squares
+        line_square_bg = '#000000'  # Black for line squares
         text_color = '#000000'      # Black text
         border_color = '#CCCCCC'    # Light gray borders
 
@@ -265,7 +265,7 @@ class ViennaTransport(BasePlugin):
         margin = 10
         line_square_size = 60
         gap_after_square = 15
-        row_height = 80
+        row_height = 100
         direction_spacing = 25
 
         current_y = margin
