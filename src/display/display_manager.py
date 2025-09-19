@@ -86,8 +86,10 @@ class DisplayManager:
         partial_refresh_disabled = self.device_config.get_config("disable_partial_refresh", default=False)
 
         # Determine if we should use partial refresh
+        # Counter 0 = full refresh, counters 1-5 = partial refresh, then reset to 0
         use_partial_refresh = (not partial_refresh_disabled and
-                             self.partial_refresh_count < self.max_partial_refreshes)
+                             self.partial_refresh_count > 0 and
+                             self.partial_refresh_count <= self.max_partial_refreshes)
 
         if partial_refresh_disabled:
             logger.info("REFRESH_MODE: Full refresh (partial refresh disabled in configuration)")
@@ -95,9 +97,12 @@ class DisplayManager:
             self.partial_refresh_count += 1
             logger.info(f"REFRESH_MODE: Attempting partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
         else:
-            # Time for a full refresh, reset counter
-            self.partial_refresh_count = 0
-            logger.info("REFRESH_MODE: Full refresh (partial refresh limit reached)")
+            # Full refresh (either counter is 0 or limit reached), then set counter to 1
+            if self.partial_refresh_count == 0:
+                logger.info("REFRESH_MODE: Full refresh (startup or counter at 0)")
+            else:
+                logger.info("REFRESH_MODE: Full refresh (partial refresh limit reached)")
+            self.partial_refresh_count = 1
 
         # Pass to the concrete instance to render to the device.
         import time
