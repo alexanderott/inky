@@ -98,11 +98,11 @@ class ViennaTransport(BasePlugin):
                         data = response.json()
 
                         # Log the API response to console
-                        print(f"\n=== Vienna Transport API Response for RBL {rbl_number} ===")
-                        print(f"URL: {url}")
-                        print(f"Response JSON:")
-                        print(json.dumps(data, indent=2, ensure_ascii=False))
-                        print("=" * 60)
+                        # print(f"\n=== Vienna Transport API Response for RBL {rbl_number} ===")
+                        # print(f"URL: {url}")
+                        # print(f"Response JSON:")
+                        # print(json.dumps(data, indent=2, ensure_ascii=False))
+                        # print("=" * 60)
                         
                         # Parse response for this specific RBL
                         rbl_data = self._parse_api_response(data, line_filter)
