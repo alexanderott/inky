@@ -131,6 +131,10 @@ class WaveshareDisplay(AbstractDisplay):
                 logger.info("PARTIAL_INIT: No specialized partial init found, using standard init")
 
         if partial_refresh:
+            # Clear display before partial refresh to prevent ghosting artifacts
+            logger.info("PARTIAL_CLEAR: Clearing display before partial refresh to prevent ghosting")
+            self.epd_display.Clear()
+
             # Try to use partial refresh if the display supports it
             # Log all available methods for debugging
             all_methods = [method for method in dir(self.epd_display) if not method.startswith('_')]
