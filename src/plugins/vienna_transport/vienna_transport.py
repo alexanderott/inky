@@ -176,24 +176,27 @@ class ViennaTransport(BasePlugin):
             logger.error(f"Error processing combined API response: {e}")
 
         # Convert to departure_data format and sort/limit departures
+        # Preserve the order from stops_config by iterating in that order
         departure_data = []
-        for stop_id, data_for_stop in stop_data.items():
-            if data_for_stop['lines'] and data_for_stop['name']:
-                # Sort and limit departures per direction to 2
-                for line_name in data_for_stop['lines']:
-                    for direction in data_for_stop['lines'][line_name]:
-                        def sort_key(time_str):
-                            if time_str == "*":
-                                return 0
-                            try:
-                                return int(time_str)
-                            except:
-                                return 999
+        for stop_id in stops_config.keys():
+            if stop_id in stop_data:
+                data_for_stop = stop_data[stop_id]
+                if data_for_stop['lines'] and data_for_stop['name']:
+                    # Sort and limit departures per direction to 2
+                    for line_name in data_for_stop['lines']:
+                        for direction in data_for_stop['lines'][line_name]:
+                            def sort_key(time_str):
+                                if time_str == "*":
+                                    return 0
+                                try:
+                                    return int(time_str)
+                                except:
+                                    return 999
 
-                        data_for_stop['lines'][line_name][direction].sort(key=sort_key)
-                        data_for_stop['lines'][line_name][direction] = data_for_stop['lines'][line_name][direction][:2]
+                            data_for_stop['lines'][line_name][direction].sort(key=sort_key)
+                            data_for_stop['lines'][line_name][direction] = data_for_stop['lines'][line_name][direction][:2]
 
-                departure_data.append(data_for_stop)
+                    departure_data.append(data_for_stop)
 
         return departure_data
 
