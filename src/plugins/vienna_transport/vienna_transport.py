@@ -434,7 +434,7 @@ class ViennaTransport(BasePlugin):
                     if times_to_show and len(times_to_show) > 0:
                         # Create fixed-width boxes for each time to ensure consistent alignment
                         time_box_width = 90  # Fixed width for each time box
-                        separator_width = 60  # Fixed width for separator
+                        separator_width = 70  # Fixed width for separator
 
                         # Calculate total width needed
                         if len(times_to_show) == 1:
@@ -456,10 +456,10 @@ class ViennaTransport(BasePlugin):
                             box_start_x = box_positions[i]
 
                             if time == "*":
-                                # Center asterisk in the 80px box
+                                # Right-align asterisk in the 80px box to match single digit positioning
                                 text_bbox = draw.textbbox((0, 0), "*", font=time_font)
                                 text_width = text_bbox[2] - text_bbox[0]
-                                text_x = box_start_x + (time_box_width - text_width) // 2
+                                text_x = box_start_x + time_box_width - text_width
                                 draw.text((text_x, direction_row_y), "*", fill=text_color, font=time_font)
                             else:
                                 if i == len(times_to_show) - 1:  # Last time gets 'min'
