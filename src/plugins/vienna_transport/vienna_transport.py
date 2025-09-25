@@ -348,8 +348,66 @@ class ViennaTransport(BasePlugin):
 
                     direction_row_y = directions_y + direction_y_offset + direction_line_height // 2
 
-                    # Combine directions into a single string
-                    combined_direction = " / ".join(rbl_data['directions'])
+                    # Handle multiple directions with truncation and two-column layout
+                    directions = rbl_data['directions']
+                    if len(directions) > 1:
+                        # Calculate available width for direction text (leave space for times on the right)
+                        times_area_width = 220  # Increased width needed for times display with consistent spacing
+                        right_margin = 10  # Reduced margin to the right
+                        max_direction_width = width - directions_x - times_area_width - right_margin
+                        truncated_directions = []
+
+                        for direction in directions:
+                            truncated_directions.append(direction)
+
+                        # For two-column layout, each direction gets roughly half the width minus pipe separator
+                        if len(truncated_directions) >= 2:
+                            pipe_separator = " | "
+                            pipe_width = draw.textbbox((0, 0), pipe_separator, font=direction_font)[2] - draw.textbbox((0, 0), pipe_separator, font=direction_font)[0]
+                            available_per_direction = (max_direction_width - pipe_width) // 2
+
+                            # Truncate each direction to fit its column
+                            final_directions = []
+                            for direction in truncated_directions[:2]:  # Only take first 2 directions
+                                text_bbox = draw.textbbox((0, 0), direction, font=direction_font)
+                                text_width = text_bbox[2] - text_bbox[0]
+
+                                if text_width > available_per_direction:
+                                    # Truncate with ellipsis
+                                    truncated = direction
+                                    while len(truncated) > 3:
+                                        test_text = truncated[:-3] + "..."
+                                        test_bbox = draw.textbbox((0, 0), test_text, font=direction_font)
+                                        if test_bbox[2] - test_bbox[0] <= available_per_direction:
+                                            truncated = test_text
+                                            break
+                                        truncated = truncated[:-1]
+                                    final_directions.append(truncated)
+                                else:
+                                    final_directions.append(direction)
+
+                            combined_direction = f"{final_directions[0]} | {final_directions[1] if len(final_directions) > 1 else ''}"
+                        else:
+                            # Single direction, truncate to full width
+                            direction = truncated_directions[0]
+                            text_bbox = draw.textbbox((0, 0), direction, font=direction_font)
+                            text_width = text_bbox[2] - text_bbox[0]
+
+                            if text_width > max_direction_width:
+                                truncated = direction
+                                while len(truncated) > 3:
+                                    test_text = truncated[:-3] + "..."
+                                    test_bbox = draw.textbbox((0, 0), test_text, font=direction_font)
+                                    if test_bbox[2] - test_bbox[0] <= max_direction_width:
+                                        truncated = test_text
+                                        break
+                                    truncated = truncated[:-1]
+                                combined_direction = truncated
+                            else:
+                                combined_direction = direction
+                    else:
+                        # Single direction, use as is
+                        combined_direction = directions[0] if directions else ""
 
                     # Draw combined direction name
                     draw.text((directions_x, direction_row_y), combined_direction, fill=text_color, font=direction_font)
@@ -372,62 +430,70 @@ class ViennaTransport(BasePlugin):
                     all_times.sort(key=sort_key)
                     times_to_show = all_times[:2]
 
-                    # Draw departure times (right-aligned)
+                    # Draw departure times (right-aligned with consistent spacing)
                     if times_to_show and len(times_to_show) > 0:
-                        # Build the complete text to calculate total width for right alignment
-                        full_text_parts = []
+                        # Create fixed-width boxes for each time to ensure consistent alignment
+                        time_box_width = 90  # Fixed width for each time box
+                        separator_width = 60  # Fixed width for separator
+
+                        # Calculate total width needed
+                        if len(times_to_show) == 1:
+                            total_times_width = time_box_width
+                        else:
+                            total_times_width = (time_box_width * len(times_to_show)) + (separator_width * (len(times_to_show) - 1))
+
+                        # Position times from right edge
+                        right_aligned_x = width - side_padding - total_times_width
+
+                        # Calculate explicit positions for each time box
+                        box_positions = []
+                        for i in range(len(times_to_show)):
+                            box_start_x = right_aligned_x + i * (time_box_width + separator_width)
+                            box_positions.append(box_start_x)
+
+                        # Draw each time in its 80px box
                         for i, time in enumerate(times_to_show):
-                            if time == "*":
-                                full_text_parts.append("   *    ")
-                            else:
-                                if i == len(times_to_show) - 1:  # Last time gets 'min'
-                                    full_text_parts.append(f"{time:>3} min")
-                                else:
-                                    full_text_parts.append(f"{time:>3}    ")
-
-                        full_text = " | ".join(full_text_parts)
-
-                        # Calculate total width using bold font for numbers and normal font for "min" and "|"
-                        # For simplicity, we'll use the bold font to calculate overall width since most text is bold
-                        full_text_bbox = draw.textbbox((0, 0), full_text, font=time_font)
-                        total_width = full_text_bbox[2] - full_text_bbox[0]
-                        right_aligned_x = width - side_padding - total_width
-
-                        # Draw each part with appropriate font
-                        current_x = right_aligned_x
-                        for i, time in enumerate(times_to_show):
-                            if i > 0:
-                                # Draw separator with normal font
-                                separator = " | "
-                                draw.text((current_x, direction_row_y), separator, fill=text_color, font=time_normal_font)
-                                sep_bbox = draw.textbbox((0, 0), separator, font=time_normal_font)
-                                current_x += sep_bbox[2] - sep_bbox[0]
+                            box_start_x = box_positions[i]
 
                             if time == "*":
-                                # Draw asterisk with bold font
-                                asterisk_text = "   *    "
-                                draw.text((current_x, direction_row_y), asterisk_text, fill=text_color, font=time_font)
-                                ast_bbox = draw.textbbox((0, 0), asterisk_text, font=time_font)
-                                current_x += ast_bbox[2] - ast_bbox[0]
+                                # Center asterisk in the 80px box
+                                text_bbox = draw.textbbox((0, 0), "*", font=time_font)
+                                text_width = text_bbox[2] - text_bbox[0]
+                                text_x = box_start_x + (time_box_width - text_width) // 2
+                                draw.text((text_x, direction_row_y), "*", fill=text_color, font=time_font)
                             else:
-                                # Draw number with bold font
-                                number_text = f"{time:>3}"
-                                draw.text((current_x, direction_row_y), number_text, fill=text_color, font=time_font)
-                                num_bbox = draw.textbbox((0, 0), number_text, font=time_font)
-                                current_x += num_bbox[2] - num_bbox[0]
-
                                 if i == len(times_to_show) - 1:  # Last time gets 'min'
+                                    # Right-align "X min" in the 80px box
+                                    # Calculate width of full text to position it right-aligned
+                                    number_bbox = draw.textbbox((0, 0), str(time), font=time_font)
+                                    min_bbox = draw.textbbox((0, 0), " min", font=time_normal_font)
+                                    total_width = (number_bbox[2] - number_bbox[0]) + (min_bbox[2] - min_bbox[0])
+
+                                    # Position right-aligned in box
+                                    text_start_x = box_start_x + time_box_width - total_width
+
+                                    # Draw number with bold font
+                                    draw.text((text_start_x, direction_row_y), str(time), fill=text_color, font=time_font)
+
                                     # Draw " min" with normal font
-                                    min_text = " min"
-                                    draw.text((current_x, direction_row_y), min_text, fill=text_color, font=time_normal_font)
-                                    min_bbox = draw.textbbox((0, 0), min_text, font=time_normal_font)
-                                    current_x += min_bbox[2] - min_bbox[0]
+                                    min_x = text_start_x + (number_bbox[2] - number_bbox[0])
+                                    draw.text((min_x, direction_row_y), " min", fill=text_color, font=time_normal_font)
                                 else:
-                                    # Draw spacing to match " min" width
-                                    spacing_text = "    "
-                                    draw.text((current_x, direction_row_y), spacing_text, fill=text_color, font=time_normal_font)
-                                    spacing_bbox = draw.textbbox((0, 0), spacing_text, font=time_normal_font)
-                                    current_x += spacing_bbox[2] - spacing_bbox[0]
+                                    # Right-align just the number in the 80px box
+                                    text_bbox = draw.textbbox((0, 0), str(time), font=time_font)
+                                    text_width = text_bbox[2] - text_bbox[0]
+                                    text_x = box_start_x + time_box_width - text_width
+                                    draw.text((text_x, direction_row_y), str(time), fill=text_color, font=time_font)
+
+                        # Draw separators between boxes
+                        for i in range(len(times_to_show) - 1):
+                            # Pipe centered between box i and box i+1
+                            separator_center_x = box_positions[i] + time_box_width + separator_width // 2
+                            # Get pipe width and center it
+                            pipe_bbox = draw.textbbox((0, 0), "|", font=time_normal_font)
+                            pipe_width = pipe_bbox[2] - pipe_bbox[0]
+                            pipe_x = separator_center_x - pipe_width // 2
+                            draw.text((pipe_x, direction_row_y), "|", fill=text_color, font=time_normal_font)
 
                     direction_y_offset += direction_line_height
 
