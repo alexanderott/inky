@@ -132,8 +132,8 @@ class WaveshareDisplay(AbstractDisplay):
 
         if partial_refresh:
             # Clear display before partial refresh to prevent ghosting artifacts
-            logger.info("PARTIAL_CLEAR: Clearing display before partial refresh to prevent ghosting")
-            self.epd_display.Clear()
+            # logger.info("PARTIAL_CLEAR: Clearing display before partial refresh to prevent ghosting")
+            # self.epd_display.Clear()
 
             # Try to use partial refresh if the display supports it
             # Log all available methods for debugging
