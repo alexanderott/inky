@@ -206,23 +206,37 @@ class ViennaTransport(BasePlugin):
             if stop_id in stop_data:
                 data_for_stop = stop_data[stop_id]
                 if data_for_stop['lines'] and data_for_stop['name']:
+                    # Sort RBL entries within each line according to the order in stops_config
+                    stop_rbl_numbers = stops_config[stop_id].get('rbl_numbers', [])
+
                     # Sort and limit departures per direction to 2
                     for line_name in data_for_stop['lines']:
-                        for rbl_key in data_for_stop['lines'][line_name]:
-                            rbl_data = data_for_stop['lines'][line_name][rbl_key]
+                        # Create ordered dict to maintain RBL order from config
+                        ordered_rbl_data = {}
 
-                            def sort_key(time_str):
-                                if time_str == "*":
-                                    return 0
-                                try:
-                                    return int(time_str)
-                                except:
-                                    return 999
+                        # First, process RBLs in the order they appear in config
+                        for rbl_number in stop_rbl_numbers:
+                            rbl_key = f"rbl_{rbl_number.strip()}"
+                            if rbl_key in data_for_stop['lines'][line_name]:
+                                rbl_data = data_for_stop['lines'][line_name][rbl_key]
 
-                            # Sort times for each direction
-                            for direction in rbl_data['times_by_direction']:
-                                rbl_data['times_by_direction'][direction].sort(key=sort_key)
-                                rbl_data['times_by_direction'][direction] = rbl_data['times_by_direction'][direction][:2]
+                                def sort_key(time_str):
+                                    if time_str == "*":
+                                        return 0
+                                    try:
+                                        return int(time_str)
+                                    except:
+                                        return 999
+
+                                # Sort times for each direction
+                                for direction in rbl_data['times_by_direction']:
+                                    rbl_data['times_by_direction'][direction].sort(key=sort_key)
+                                    rbl_data['times_by_direction'][direction] = rbl_data['times_by_direction'][direction][:2]
+
+                                ordered_rbl_data[rbl_key] = rbl_data
+
+                        # Replace the unordered dict with ordered one
+                        data_for_stop['lines'][line_name] = ordered_rbl_data
 
                     departure_data.append(data_for_stop)
 
