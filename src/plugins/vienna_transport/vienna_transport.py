@@ -167,7 +167,11 @@ class ViennaTransport(BasePlugin):
                                 departure_data_by_direction = {}
 
                                 for departure in first_two_departures:
-                                    direction = departure.get('vehicle', {}).get('towards', 'Unknown Direction')
+                                    # Try to get direction from vehicle first, then from line itself
+                                    direction = departure.get('vehicle', {}).get('towards', '')
+                                    if not direction:
+                                        direction = line_info.get('towards', '')
+                                    direction = self._sanitize_towards(direction)
                                     countdown = departure.get('departureTime', {}).get('countdown', None)
 
                                     if direction not in directions_in_first_two:
@@ -240,6 +244,20 @@ class ViennaTransport(BasePlugin):
         draw.pieslice([x2 - 2*radius, y1, x2, y1 + 2*radius], 270, 360, fill=fill, outline=outline)
         draw.pieslice([x1, y2 - 2*radius, x1 + 2*radius, y2], 90, 180, fill=fill, outline=outline)
         draw.pieslice([x2 - 2*radius, y2 - 2*radius, x2, y2], 0, 90, fill=fill, outline=outline)
+
+    def _sanitize_towards(self, towards_text):
+        """Sanitize towards text by trimming whitespace and capitalizing properly."""
+        if not towards_text:
+            return "Unknown Direction"
+
+        # Trim whitespace
+        sanitized = towards_text.strip()
+
+        if not sanitized:
+            return "Unknown Direction"
+
+        # Capitalize: first letter of every word uppercase
+        return sanitized.title()
 
     def _draw_transport_layout(self, dimensions, departure_data):
         """Draw the transport layout manually using PIL."""
