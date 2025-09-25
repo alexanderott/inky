@@ -1,3 +1,5 @@
+from pprint import pprint
+
 import requests
 import json
 import logging
@@ -38,7 +40,7 @@ class ViennaTransport(BasePlugin):
                     'lines': '77A'  # Optional filter for specific lines
                 },
                 'Hintzerstraße': {
-                    'rbl_numbers': ['254'],  # Karlsplatz and Wittelsbachstraße
+                    'rbl_numbers': ['254', '267'],  # Karlsplatz and Wittelsbachstraße
                     'lines': '4A'  # Optional filter for specific lines
                 },
             }
@@ -95,6 +97,7 @@ class ViennaTransport(BasePlugin):
             url = f"{self.api_base_url}?rbl={rbl_params}&sender=vienna_transport_plugin"
 
             logger.info(f"Fetching data for {len(all_rbl_numbers)} RBL numbers in single request")
+            logger.info(f"Request URL: {url}")
             response = requests.get(url, timeout=15)  # Increased timeout for larger response
             response.raise_for_status()
 
@@ -150,18 +153,26 @@ class ViennaTransport(BasePlugin):
                             if line_name not in stop_data[stop_id]['lines']:
                                 stop_data[stop_id]['lines'][line_name] = {}
 
-                            # Process departures
+                            # Process departures - collect first 2 departures with their directions
                             if 'departures' in line_info and 'departure' in line_info['departures']:
                                 departures = line_info['departures']['departure']
                                 if not isinstance(departures, list):
                                     departures = [departures]
 
-                                for departure in departures[:2]:  # Limit to first 2 departures
+                                # Get the first 2 departures to determine directions
+                                first_two_departures = departures[:2]
+
+                                # Collect unique directions from first 2 departures
+                                directions_in_first_two = []
+                                departure_data_by_direction = {}
+
+                                for departure in first_two_departures:
                                     direction = departure.get('vehicle', {}).get('towards', 'Unknown Direction')
                                     countdown = departure.get('departureTime', {}).get('countdown', None)
 
-                                    if direction not in stop_data[stop_id]['lines'][line_name]:
-                                        stop_data[stop_id]['lines'][line_name][direction] = []
+                                    if direction not in directions_in_first_two:
+                                        directions_in_first_two.append(direction)
+                                        departure_data_by_direction[direction] = []
 
                                     # Add countdown time
                                     if countdown is not None:
@@ -169,8 +180,17 @@ class ViennaTransport(BasePlugin):
                                             time_display = "*"
                                         else:
                                             time_display = str(countdown)
+                                        departure_data_by_direction[direction].append(time_display)
 
-                                        stop_data[stop_id]['lines'][line_name][direction].append(time_display)
+                                # Store as single entry with directions array and times
+                                if directions_in_first_two:
+                                    # Use RBL number as key to ensure one entry per RBL
+                                    rbl_key = f"rbl_{rbl_number}"
+                                    if rbl_key not in stop_data[stop_id]['lines'][line_name]:
+                                        stop_data[stop_id]['lines'][line_name][rbl_key] = {
+                                            'directions': directions_in_first_two,
+                                            'times_by_direction': departure_data_by_direction
+                                        }
 
         except Exception as e:
             logger.error(f"Error processing combined API response: {e}")
@@ -184,7 +204,9 @@ class ViennaTransport(BasePlugin):
                 if data_for_stop['lines'] and data_for_stop['name']:
                     # Sort and limit departures per direction to 2
                     for line_name in data_for_stop['lines']:
-                        for direction in data_for_stop['lines'][line_name]:
+                        for rbl_key in data_for_stop['lines'][line_name]:
+                            rbl_data = data_for_stop['lines'][line_name][rbl_key]
+
                             def sort_key(time_str):
                                 if time_str == "*":
                                     return 0
@@ -193,10 +215,15 @@ class ViennaTransport(BasePlugin):
                                 except:
                                     return 999
 
-                            data_for_stop['lines'][line_name][direction].sort(key=sort_key)
-                            data_for_stop['lines'][line_name][direction] = data_for_stop['lines'][line_name][direction][:2]
+                            # Sort times for each direction
+                            for direction in rbl_data['times_by_direction']:
+                                rbl_data['times_by_direction'][direction].sort(key=sort_key)
+                                rbl_data['times_by_direction'][direction] = rbl_data['times_by_direction'][direction][:2]
 
                     departure_data.append(data_for_stop)
+
+
+        pprint(departure_data)
 
         return departure_data
 
@@ -239,6 +266,7 @@ class ViennaTransport(BasePlugin):
             line_name_font = get_font("Jost", line_name_font_size, "bold")  # Bold font for line name
             direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
             time_font = get_font("Jost", direction_font_size, "bold")  # Bold font for times
+            time_normal_font = get_font("Jost", direction_font_size, "normal")  # Normal font for "min" and pipe
 
             # Fallback to default fonts if get_font returns None
             if line_name_font is None:
@@ -247,11 +275,14 @@ class ViennaTransport(BasePlugin):
                 direction_font = ImageFont.load_default()
             if time_font is None:
                 time_font = ImageFont.load_default()
+            if time_normal_font is None:
+                time_normal_font = ImageFont.load_default()
         except Exception as e:
             logger.error(f"Error loading fonts: {e}")
             line_name_font = ImageFont.load_default()
             direction_font = ImageFont.load_default()
             time_font = ImageFont.load_default()
+            time_normal_font = ImageFont.load_default()
 
         # Colors
         line_square_bg = '#000000'  # Black for line squares
@@ -266,7 +297,7 @@ class ViennaTransport(BasePlugin):
                 continue
 
             # Draw each line for this stop
-            for line_name, directions in stop['lines'].items():
+            for line_name, rbl_data_dict in stop['lines'].items():
                 if current_y + row_height > height:
                     break  # Not enough space for more rows
 
@@ -291,49 +322,94 @@ class ViennaTransport(BasePlugin):
                 directions_x = square_x + line_square_size + gap_after_square
                 directions_y = current_y - row_content_offset
 
-                # Draw each direction
+                # Process each RBL entry for this line
                 direction_y_offset = 0
-                for direction, times in directions.items():
+                for rbl_key, rbl_data in rbl_data_dict.items():
                     if direction_y_offset + direction_line_height > row_height:
                         break  # Not enough space in this row
 
                     direction_row_y = directions_y + direction_y_offset + direction_line_height // 2
 
-                    # Draw direction name
-                    draw.text((directions_x, direction_row_y), direction, fill=text_color, font=direction_font)
+                    # Combine directions into a single string
+                    combined_direction = " / ".join(rbl_data['directions'])
 
-                    # Calculate position for times (after direction name)
-                    direction_bbox = draw.textbbox((0, 0), direction, font=direction_font)
-                    direction_width = direction_bbox[2] - direction_bbox[0]
-                    times_x = directions_x + direction_width + 20
+                    # Draw combined direction name
+                    draw.text((directions_x, direction_row_y), combined_direction, fill=text_color, font=direction_font)
+
+                    # Collect all times from all directions for this RBL
+                    all_times = []
+                    for direction in rbl_data['directions']:
+                        if direction in rbl_data['times_by_direction']:
+                            all_times.extend(rbl_data['times_by_direction'][direction])
+
+                    # Sort and limit to 2 times
+                    def sort_key(time_str):
+                        if time_str == "*":
+                            return 0
+                        try:
+                            return int(time_str)
+                        except:
+                            return 999
+
+                    all_times.sort(key=sort_key)
+                    times_to_show = all_times[:2]
 
                     # Draw departure times (right-aligned)
-                    if times and len(times) > 0:
-                        # Format times with consistent width and proper spacing
-                        formatted_times = []
-                        times_to_show = times[:2]  # Only show 2 times
-
+                    if times_to_show and len(times_to_show) > 0:
+                        # Build the complete text to calculate total width for right alignment
+                        full_text_parts = []
                         for i, time in enumerate(times_to_show):
                             if time == "*":
-                                # For asterisk, use consistent width
-                                formatted_times.append("   *    ")
+                                full_text_parts.append("   *    ")
                             else:
-                                # For numbers, use consistent width
                                 if i == len(times_to_show) - 1:  # Last time gets 'min'
-                                    formatted_times.append(f"{time:>3} min")
+                                    full_text_parts.append(f"{time:>3} min")
                                 else:
-                                    formatted_times.append(f"{time:>3}    ")  # Same width as " min"
+                                    full_text_parts.append(f"{time:>3}    ")
 
-                        # Join times with separators
-                        times_text = " | ".join(formatted_times)
+                        full_text = " | ".join(full_text_parts)
 
-                        # Calculate right-aligned position
-                        times_bbox = draw.textbbox((0, 0), times_text, font=time_font)
-                        times_width = times_bbox[2] - times_bbox[0]
-                        right_aligned_x = width - side_padding - times_width
+                        # Calculate total width using bold font for numbers and normal font for "min" and "|"
+                        # For simplicity, we'll use the bold font to calculate overall width since most text is bold
+                        full_text_bbox = draw.textbbox((0, 0), full_text, font=time_font)
+                        total_width = full_text_bbox[2] - full_text_bbox[0]
+                        right_aligned_x = width - side_padding - total_width
 
-                        # Draw the times
-                        draw.text((right_aligned_x, direction_row_y), times_text, fill=text_color, font=time_font)
+                        # Draw each part with appropriate font
+                        current_x = right_aligned_x
+                        for i, time in enumerate(times_to_show):
+                            if i > 0:
+                                # Draw separator with normal font
+                                separator = " | "
+                                draw.text((current_x, direction_row_y), separator, fill=text_color, font=time_normal_font)
+                                sep_bbox = draw.textbbox((0, 0), separator, font=time_normal_font)
+                                current_x += sep_bbox[2] - sep_bbox[0]
+
+                            if time == "*":
+                                # Draw asterisk with bold font
+                                asterisk_text = "   *    "
+                                draw.text((current_x, direction_row_y), asterisk_text, fill=text_color, font=time_font)
+                                ast_bbox = draw.textbbox((0, 0), asterisk_text, font=time_font)
+                                current_x += ast_bbox[2] - ast_bbox[0]
+                            else:
+                                # Draw number with bold font
+                                number_text = f"{time:>3}"
+                                draw.text((current_x, direction_row_y), number_text, fill=text_color, font=time_font)
+                                num_bbox = draw.textbbox((0, 0), number_text, font=time_font)
+                                current_x += num_bbox[2] - num_bbox[0]
+
+                                if i == len(times_to_show) - 1:  # Last time gets 'min'
+                                    # Draw " min" with normal font
+                                    min_text = " min"
+                                    draw.text((current_x, direction_row_y), min_text, fill=text_color, font=time_normal_font)
+                                    min_bbox = draw.textbbox((0, 0), min_text, font=time_normal_font)
+                                    current_x += min_bbox[2] - min_bbox[0]
+                                else:
+                                    # Draw spacing to match " min" width
+                                    spacing_text = "    "
+                                    draw.text((current_x, direction_row_y), spacing_text, fill=text_color, font=time_normal_font)
+                                    spacing_bbox = draw.textbbox((0, 0), spacing_text, font=time_normal_font)
+                                    current_x += spacing_bbox[2] - spacing_bbox[0]
 
                     direction_y_offset += direction_line_height
 
