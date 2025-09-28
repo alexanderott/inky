@@ -12,10 +12,19 @@ logger = logging.getLogger(__name__)
 
 class ViennaTransport(BasePlugin):
     """Plugin for displaying Vienna public transport departure times."""
-    
+
     def __init__(self, config, **dependencies):
         super().__init__(config, **dependencies)
         self.api_base_url = "https://www.wienerlinien.at/ogd_realtime/monitor"
+        self.session = requests.Session()
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=1,
+            pool_maxsize=1,
+            max_retries=3,
+            pool_block=False
+        )
+        self.session.mount('https://', adapter)
+        self.session.mount('http://', adapter)
     
     def generate_image(self, settings, device_config):
         """Generate an image showing departure times for Vienna public transport."""
@@ -98,7 +107,7 @@ class ViennaTransport(BasePlugin):
 
             logger.info(f"Fetching data for {len(all_rbl_numbers)} RBL numbers in single request")
             logger.info(f"Request URL: {url}")
-            response = requests.get(url, timeout=15)  # Increased timeout for larger response
+            response = self.session.get(url, timeout=15)
             response.raise_for_status()
 
             data = response.json()
