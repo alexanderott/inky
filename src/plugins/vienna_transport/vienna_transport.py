@@ -3,7 +3,11 @@ from pprint import pprint
 import requests
 import json
 import logging
+import time
+import socket
 from datetime import datetime
+from urllib3.exceptions import ProtocolError
+from requests.exceptions import ConnectionError, Timeout, RequestException
 from plugins.base_plugin.base_plugin import BasePlugin
 from PIL import Image, ImageDraw, ImageFont
 from utils.app_utils import get_font
@@ -16,15 +20,22 @@ class ViennaTransport(BasePlugin):
     def __init__(self, config, **dependencies):
         super().__init__(config, **dependencies)
         self.api_base_url = "https://www.wienerlinien.at/ogd_realtime/monitor"
-        self.session = requests.Session()
+
+    def _create_session(self):
+        """Create a fresh session with conservative settings for long-running processes."""
+        session = requests.Session()
+        # Conservative adapter settings to prevent connection issues
         adapter = requests.adapters.HTTPAdapter(
             pool_connections=1,
             pool_maxsize=1,
-            max_retries=3,
+            max_retries=0,  # We'll handle retries manually
             pool_block=False
         )
-        self.session.mount('https://', adapter)
-        self.session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        session.mount('http://', adapter)
+        # Disable keep-alive to force new connections
+        session.headers.update({'Connection': 'close'})
+        return session
     
     def generate_image(self, settings, device_config):
         """Generate an image showing departure times for Vienna public transport."""
@@ -100,24 +111,80 @@ class ViennaTransport(BasePlugin):
             logger.warning("No valid RBL numbers found in configuration")
             return []
 
-        try:
-            # Make single API request for all RBL numbers
-            rbl_params = ','.join(all_rbl_numbers)
-            url = f"{self.api_base_url}?rbl={rbl_params}&sender=vienna_transport_plugin"
+        # Make single API request for all RBL numbers
+        rbl_params = ','.join(all_rbl_numbers)
+        url = f"{self.api_base_url}?rbl={rbl_params}&sender=vienna_transport_plugin"
 
-            logger.info(f"Fetching data for {len(all_rbl_numbers)} RBL numbers in single request")
-            logger.info(f"Request URL: {url}")
-            response = self.session.get(url, timeout=15)
-            response.raise_for_status()
-
-            data = response.json()
-
+        # Try fetching with retry logic and fresh sessions
+        data = self._fetch_with_retry(url)
+        if data:
             # Process the combined response
             return self._process_combined_response(data, rbl_to_stop_mapping, stops_config)
-
-        except Exception as e:
-            logger.error(f"Error fetching combined departure data: {e}")
+        else:
+            logger.error("Failed to fetch departure data after all retries")
             return []
+
+    def _fetch_with_retry(self, url, max_retries=3, initial_delay=1):
+        """Fetch data with retry logic and fresh session for each attempt."""
+        last_exception = None
+
+        for attempt in range(max_retries):
+            session = None
+            try:
+                # Force DNS resolution refresh by clearing DNS cache if possible
+                socket.setdefaulttimeout(10)
+
+                # Create a fresh session for each retry
+                session = self._create_session()
+
+                logger.info(f"Attempt {attempt + 1}/{max_retries}: Fetching Vienna transport data")
+                logger.debug(f"Request URL: {url}")
+
+                # Make the request with shorter timeout
+                response = session.get(url, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+
+                logger.info(f"Successfully fetched data on attempt {attempt + 1}")
+                return data
+
+            except (ConnectionError, ProtocolError, OSError) as e:
+                # These are the errors we typically see with long-running connections
+                last_exception = e
+                if "Invalid argument" in str(e) or "errno 22" in str(e):
+                    logger.warning(f"Connection error (errno 22) on attempt {attempt + 1}: {e}")
+                else:
+                    logger.warning(f"Connection error on attempt {attempt + 1}: {e}")
+
+            except Timeout as e:
+                last_exception = e
+                logger.warning(f"Timeout on attempt {attempt + 1}: {e}")
+
+            except RequestException as e:
+                last_exception = e
+                logger.warning(f"Request error on attempt {attempt + 1}: {e}")
+
+            except Exception as e:
+                last_exception = e
+                logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
+
+            finally:
+                # Always close the session to free resources
+                if session:
+                    try:
+                        session.close()
+                    except:
+                        pass
+
+            # If not the last attempt, wait before retrying with exponential backoff
+            if attempt < max_retries - 1:
+                delay = initial_delay * (2 ** attempt)  # Exponential backoff
+                logger.info(f"Waiting {delay} seconds before retry...")
+                time.sleep(delay)
+
+        # All retries failed
+        logger.error(f"All {max_retries} attempts failed. Last error: {last_exception}")
+        return None
 
     def _process_combined_response(self, data, rbl_to_stop_mapping, stops_config):
         """Process the combined API response and group monitors by stop."""
