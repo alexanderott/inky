@@ -1,13 +1,15 @@
-from pprint import pprint
-
 import requests
 import json
 import logging
 import time
 import socket
+import gc
+import os
+import resource
 from datetime import datetime
 from urllib3.exceptions import ProtocolError
 from requests.exceptions import ConnectionError, Timeout, RequestException
+from contextlib import contextmanager
 from plugins.base_plugin.base_plugin import BasePlugin
 from PIL import Image, ImageDraw, ImageFont
 from utils.app_utils import get_font
@@ -20,22 +22,38 @@ class ViennaTransport(BasePlugin):
     def __init__(self, config, **dependencies):
         super().__init__(config, **dependencies)
         self.api_base_url = "https://www.wienerlinien.at/ogd_realtime/monitor"
+        self.request_counter = 0
+        self.max_requests_before_cleanup = 100  # Force cleanup every 100 requests
 
-    def _create_session(self):
-        """Create a fresh session with conservative settings for long-running processes."""
-        session = requests.Session()
-        # Conservative adapter settings to prevent connection issues
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=1,
-            pool_maxsize=1,
-            max_retries=0,  # We'll handle retries manually
-            pool_block=False
-        )
-        session.mount('https://', adapter)
-        session.mount('http://', adapter)
-        # Disable keep-alive to force new connections
-        session.headers.update({'Connection': 'close'})
-        return session
+    @contextmanager
+    def _get_session(self):
+        """Context manager for session that ensures proper cleanup."""
+        session = None
+        try:
+            session = requests.Session()
+            # Minimal adapter to reduce resource usage
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=1,
+                pool_maxsize=1,
+                max_retries=0,
+                pool_block=False
+            )
+            session.mount('https://', adapter)
+            session.mount('http://', adapter)
+            # Force connection close to prevent lingering connections
+            session.headers.update({'Connection': 'close'})
+            yield session
+        finally:
+            if session:
+                try:
+                    # Close all adapters and clear pools
+                    for adapter in session.adapters.values():
+                        adapter.close()
+                    session.close()
+                except Exception as e:
+                    logger.debug(f"Error closing session: {e}")
+            # Force garbage collection to free file descriptors
+            gc.collect()
     
     def generate_image(self, settings, device_config):
         """Generate an image showing departure times for Vienna public transport."""
@@ -125,34 +143,59 @@ class ViennaTransport(BasePlugin):
             return []
 
     def _fetch_with_retry(self, url, max_retries=3, initial_delay=1):
-        """Fetch data with retry logic and fresh session for each attempt."""
+        """Fetch data with retry logic and proper resource cleanup."""
         last_exception = None
 
+        # Increment request counter and force cleanup periodically
+        self.request_counter += 1
+        if self.request_counter >= self.max_requests_before_cleanup:
+            logger.info(f"Forcing cleanup after {self.request_counter} requests")
+            self.request_counter = 0
+            gc.collect()
+            time.sleep(1)  # Give system time to cleanup
+
+        # Check if we're approaching file descriptor limits
+        try:
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            # Count open file descriptors (Linux-specific)
+            if os.path.exists('/proc/self/fd'):
+                open_fds = len(os.listdir('/proc/self/fd'))
+                if open_fds > soft * 0.8:  # Warning at 80% usage
+                    logger.warning(f"High file descriptor usage: {open_fds}/{soft}")
+                    # Force aggressive cleanup
+                    gc.collect()
+                    time.sleep(0.5)  # Give system time to release resources
+        except:
+            pass  # Not critical if we can't check
+
         for attempt in range(max_retries):
-            session = None
             try:
-                # Force DNS resolution refresh by clearing DNS cache if possible
-                socket.setdefaulttimeout(10)
+                # Use context manager to ensure proper cleanup
+                with self._get_session() as session:
+                    logger.info(f"Attempt {attempt + 1}/{max_retries}: Fetching Vienna transport data")
 
-                # Create a fresh session for each retry
-                session = self._create_session()
+                    # Make request with explicit timeout and stream=False
+                    response = session.get(url, timeout=10, stream=False)
+                    response.raise_for_status()
 
-                logger.info(f"Attempt {attempt + 1}/{max_retries}: Fetching Vienna transport data")
-                logger.debug(f"Request URL: {url}")
+                    # Parse JSON and immediately close response
+                    data = response.json()
+                    response.close()
 
-                # Make the request with shorter timeout
-                response = session.get(url, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-
-                logger.info(f"Successfully fetched data on attempt {attempt + 1}")
-                return data
+                    logger.info(f"Successfully fetched data on attempt {attempt + 1}")
+                    return data
 
             except (ConnectionError, ProtocolError, OSError) as e:
-                # These are the errors we typically see with long-running connections
                 last_exception = e
-                if "Invalid argument" in str(e) or "errno 22" in str(e):
-                    logger.warning(f"Connection error (errno 22) on attempt {attempt + 1}: {e}")
+                error_str = str(e)
+                if "Too many open files" in error_str or "errno 24" in error_str:
+                    logger.error(f"File descriptor exhaustion detected: {e}")
+                    # Emergency cleanup
+                    gc.collect()
+                    time.sleep(2)  # Give OS time to reclaim resources
+                elif "Invalid argument" in error_str or "errno 22" in error_str:
+                    logger.warning(f"Connection error (possibly FD exhaustion) on attempt {attempt + 1}: {e}")
+                    gc.collect()
                 else:
                     logger.warning(f"Connection error on attempt {attempt + 1}: {e}")
 
@@ -168,19 +211,13 @@ class ViennaTransport(BasePlugin):
                 last_exception = e
                 logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
 
-            finally:
-                # Always close the session to free resources
-                if session:
-                    try:
-                        session.close()
-                    except:
-                        pass
-
-            # If not the last attempt, wait before retrying with exponential backoff
+            # If not the last attempt, wait before retrying
             if attempt < max_retries - 1:
-                delay = initial_delay * (2 ** attempt)  # Exponential backoff
+                delay = initial_delay * (2 ** attempt)
                 logger.info(f"Waiting {delay} seconds before retry...")
                 time.sleep(delay)
+                # Extra cleanup between retries
+                gc.collect()
 
         # All retries failed
         logger.error(f"All {max_retries} attempts failed. Last error: {last_exception}")
@@ -317,7 +354,8 @@ class ViennaTransport(BasePlugin):
                     departure_data.append(data_for_stop)
 
 
-        pprint(departure_data)
+        # Debug logging instead of pprint to avoid potential file operations
+        logger.debug(f"Processed {len(departure_data)} stops with departure data")
 
         return departure_data
 
