@@ -274,15 +274,25 @@ class PlaylistRefresh(RefreshAction):
 
         # Check if a refresh is needed based on the plugin instance's criteria
         if self.plugin_instance.should_refresh(current_dt) or self.force:
-            logger.info(f"Refreshing plugin instance. | plugin_instance: '{self.plugin_instance.name}'") 
+            logger.info(f"Refreshing plugin instance. | plugin_instance: '{self.plugin_instance.name}'")
             # Generate a new image
             image = plugin.generate_image(self.plugin_instance.settings, device_config)
-            image.save(plugin_image_path)
+            try:
+                image.save(plugin_image_path)
+            finally:
+                # Ensure file descriptor is released after save
+                if hasattr(image, 'fp') and image.fp:
+                    try:
+                        image.fp.close()
+                    except:
+                        pass
             self.plugin_instance.latest_refresh_time = current_dt.isoformat()
         else:
             logger.info(f"Not time to refresh plugin instance, using latest image. | plugin_instance: {self.plugin_instance.name}.")
             # Load the existing image from disk
             with Image.open(plugin_image_path) as img:
-                image = img.copy()
+                # Load image data into memory and close file immediately
+                image = Image.new(img.mode, img.size)
+                image.putdata(list(img.getdata()))
 
         return image
