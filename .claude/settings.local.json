@@ -6,7 +6,8 @@
       "Bash(pip3 install:*)",
       "Bash(source:*)",
       "WebSearch",
-      "Bash(mkdir:*)"
+      "Bash(mkdir:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
