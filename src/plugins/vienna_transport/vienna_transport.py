@@ -24,8 +24,6 @@ class ViennaTransport(BasePlugin):
         self.api_base_url = "https://www.wienerlinien.at/ogd_realtime/monitor"
         self.request_counter = 0
         self.max_requests_before_cleanup = 100  # Force cleanup every 100 requests
-        # Cache fonts to prevent file descriptor leaks
-        self._fonts_cache = None
 
     @contextmanager
     def _get_session(self):
@@ -409,38 +407,22 @@ class ViennaTransport(BasePlugin):
         direction_line_height = 45  # Height between direction lines
         direction_font_size = 32  # Font size for direction text
 
-        # Define font sizes and load fonts (cached to prevent file descriptor leaks)
+        # Load fonts (globally cached by get_font to prevent file descriptor leaks)
         try:
-            # Load fonts once and cache them
-            if self._fonts_cache is None:
-                line_name_font = get_font("Jost", line_name_font_size, "bold")  # Bold font for line name
-                direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
-                time_font = get_font("Jost", direction_font_size, "bold")  # Bold font for times
-                time_normal_font = get_font("Jost", direction_font_size, "normal")  # Normal font for "min" and pipe
+            line_name_font = get_font("Jost", line_name_font_size, "bold")  # Bold font for line name
+            direction_font = get_font("Jost", direction_font_size, "normal")  # Larger font for directions
+            time_font = get_font("Jost", direction_font_size, "bold")  # Bold font for times
+            time_normal_font = get_font("Jost", direction_font_size, "normal")  # Normal font for "min" and pipe
 
-                # Fallback to default fonts if get_font returns None
-                if line_name_font is None:
-                    line_name_font = ImageFont.load_default()
-                if direction_font is None:
-                    direction_font = ImageFont.load_default()
-                if time_font is None:
-                    time_font = ImageFont.load_default()
-                if time_normal_font is None:
-                    time_normal_font = ImageFont.load_default()
-
-                # Cache the fonts
-                self._fonts_cache = {
-                    'line_name': line_name_font,
-                    'direction': direction_font,
-                    'time': time_font,
-                    'time_normal': time_normal_font
-                }
-
-            # Use cached fonts
-            line_name_font = self._fonts_cache['line_name']
-            direction_font = self._fonts_cache['direction']
-            time_font = self._fonts_cache['time']
-            time_normal_font = self._fonts_cache['time_normal']
+            # Fallback to default fonts if get_font returns None
+            if line_name_font is None:
+                line_name_font = ImageFont.load_default()
+            if direction_font is None:
+                direction_font = ImageFont.load_default()
+            if time_font is None:
+                time_font = ImageFont.load_default()
+            if time_normal_font is None:
+                time_normal_font = ImageFont.load_default()
 
         except Exception as e:
             logger.error(f"Error loading fonts: {e}")

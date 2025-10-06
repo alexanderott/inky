@@ -40,6 +40,10 @@ FONTS = {
     "jost-semibold": "Jost-SemiBold.ttf"
 }
 
+# Global font cache to prevent file descriptor leaks
+# Key: (font_name, font_size, font_weight)
+_FONT_CACHE = {}
+
 def resolve_path(file_path):
     src_dir = os.getenv("SRC_DIR")
     if src_dir is None:
@@ -72,6 +76,15 @@ def is_connected():
         return False
 
 def get_font(font_name, font_size=50, font_weight="normal"):
+    # Create cache key
+    cache_key = (font_name, int(font_size), font_weight)
+
+    # Return cached font if available
+    if cache_key in _FONT_CACHE:
+        return _FONT_CACHE[cache_key]
+
+    # Load font if not cached
+    font = None
     if font_name in FONT_FAMILIES:
         font_variants = FONT_FAMILIES[font_name]
 
@@ -81,13 +94,16 @@ def get_font(font_name, font_size=50, font_weight="normal"):
 
         if font_entry:
             font_path = resolve_path(os.path.join("static", "fonts", font_entry["file"]))
-            return ImageFont.truetype(font_path, font_size)
+            font = ImageFont.truetype(font_path, int(font_size))
+            # Cache the loaded font to prevent file descriptor leaks
+            _FONT_CACHE[cache_key] = font
+            logger.debug(f"Cached font: {cache_key}")
         else:
             logger.warn(f"Requested font weight not found: font_name={font_name}, font_weight={font_weight}")
     else:
         logger.warn(f"Requested font not found: font_name={font_name}")
 
-    return None
+    return font
 
 def get_fonts():
     fonts_list = []
