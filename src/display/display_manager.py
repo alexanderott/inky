@@ -72,44 +72,88 @@ class DisplayManager:
         if not hasattr(self, "display"):
             raise ValueError("No valid display instance initialized.")
 
-        # Save the image
-        logger.info(f"Saving image to {self.device_config.current_image_file}")
-        image.save(self.device_config.current_image_file)
+        # Keep reference to original image to close it later
+        original_image = image
 
-        # Resize and adjust orientation
-        image = change_orientation(image, self.device_config.get_config("orientation"))
-        image = resize_image(image, self.device_config.get_resolution(), image_settings)
-        if self.device_config.get_config("inverted_image"): image = image.rotate(180)
-        image = apply_image_enhancement(image, self.device_config.get_config("image_settings"))
+        try:
+            # Save the image
+            logger.info(f"Saving image to {self.device_config.current_image_file}")
+            image.save(self.device_config.current_image_file)
 
-        # Check if partial refresh is disabled in config
-        partial_refresh_disabled = self.device_config.get_config("disable_partial_refresh", default=False)
+            # Resize and adjust orientation - each operation creates a new image
+            # We need to track and close intermediate images to prevent FD leaks
+            prev_image = image
+            image = change_orientation(image, self.device_config.get_config("orientation"))
+            if image is not prev_image and prev_image is not original_image:
+                try:
+                    prev_image.close()
+                except:
+                    pass
 
-        # Determine if we should use partial refresh
-        # Counter 0 = full refresh, counters 1-5 = partial refresh, then reset to 0
-        use_partial_refresh = (not partial_refresh_disabled and
-                             self.partial_refresh_count > 0 and
-                             self.partial_refresh_count <= self.max_partial_refreshes)
+            prev_image = image
+            image = resize_image(image, self.device_config.get_resolution(), image_settings)
+            if image is not prev_image and prev_image is not original_image:
+                try:
+                    prev_image.close()
+                except:
+                    pass
 
-        if partial_refresh_disabled:
-            logger.info("REFRESH_MODE: Full refresh (partial refresh disabled in configuration)")
-        elif use_partial_refresh:
-            self.partial_refresh_count += 1
-            logger.info(f"REFRESH_MODE: Attempting partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
-        else:
-            # Full refresh (either counter is 0 or limit reached), then set counter to 1
-            if self.partial_refresh_count == 0:
-                logger.info("REFRESH_MODE: Full refresh (startup or counter at 0)")
+            if self.device_config.get_config("inverted_image"):
+                prev_image = image
+                image = image.rotate(180)
+                if image is not prev_image and prev_image is not original_image:
+                    try:
+                        prev_image.close()
+                    except:
+                        pass
+
+            prev_image = image
+            image = apply_image_enhancement(image, self.device_config.get_config("image_settings"))
+            if image is not prev_image and prev_image is not original_image:
+                try:
+                    prev_image.close()
+                except:
+                    pass
+
+            # Check if partial refresh is disabled in config
+            partial_refresh_disabled = self.device_config.get_config("disable_partial_refresh", default=False)
+
+            # Determine if we should use partial refresh
+            # Counter 0 = full refresh, counters 1-5 = partial refresh, then reset to 0
+            use_partial_refresh = (not partial_refresh_disabled and
+                                 self.partial_refresh_count > 0 and
+                                 self.partial_refresh_count <= self.max_partial_refreshes)
+
+            if partial_refresh_disabled:
+                logger.info("REFRESH_MODE: Full refresh (partial refresh disabled in configuration)")
+            elif use_partial_refresh:
+                self.partial_refresh_count += 1
+                logger.info(f"REFRESH_MODE: Attempting partial refresh ({self.partial_refresh_count}/{self.max_partial_refreshes})")
             else:
-                logger.info("REFRESH_MODE: Full refresh (partial refresh limit reached)")
-            self.partial_refresh_count = 1
+                # Full refresh (either counter is 0 or limit reached), then set counter to 1
+                if self.partial_refresh_count == 0:
+                    logger.info("REFRESH_MODE: Full refresh (startup or counter at 0)")
+                else:
+                    logger.info("REFRESH_MODE: Full refresh (partial refresh limit reached)")
+                self.partial_refresh_count = 1
 
-        # Pass to the concrete instance to render to the device.
-        import time
-        refresh_start_time = time.time()
-        logger.info(f"REFRESH_START: Beginning display refresh at {time.strftime('%H:%M:%S')}")
+            # Pass to the concrete instance to render to the device.
+            import time
+            refresh_start_time = time.time()
+            logger.info(f"REFRESH_START: Beginning display refresh at {time.strftime('%H:%M:%S')}")
 
-        self.display.display_image(image, image_settings, partial_refresh=use_partial_refresh)
+            self.display.display_image(image, image_settings, partial_refresh=use_partial_refresh)
 
-        total_refresh_time = time.time() - refresh_start_time
-        logger.info(f"REFRESH_COMPLETE: Display refresh completed in {total_refresh_time:.2f} seconds")
+            total_refresh_time = time.time() - refresh_start_time
+            logger.info(f"REFRESH_COMPLETE: Display refresh completed in {total_refresh_time:.2f} seconds")
+        finally:
+            # Always close the final processed image and original image to prevent FD leaks
+            if image is not original_image:
+                try:
+                    image.close()
+                except:
+                    pass
+            try:
+                original_image.close()
+            except:
+                pass

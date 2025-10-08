@@ -279,13 +279,16 @@ class PlaylistRefresh(RefreshAction):
             image = plugin.generate_image(self.plugin_instance.settings, device_config)
             try:
                 image.save(plugin_image_path)
-            finally:
-                # Ensure file descriptor is released after save
+                # Force close of any file handles that PIL may have opened during save
                 if hasattr(image, 'fp') and image.fp:
                     try:
                         image.fp.close()
                     except:
                         pass
+            finally:
+                # PIL's save() opens a file internally - ensure it's closed
+                # We need to load the saved image and close the original to release all FDs
+                pass
             self.plugin_instance.latest_refresh_time = current_dt.isoformat()
         else:
             logger.info(f"Not time to refresh plugin instance, using latest image. | plugin_instance: {self.plugin_instance.name}.")

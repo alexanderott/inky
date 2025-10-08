@@ -13,7 +13,10 @@ def get_image(image_url):
     response = requests.get(image_url)
     img = None
     if 200 <= response.status_code < 300 or response.status_code == 304:
-        img = Image.open(BytesIO(response.content))
+        # Open from BytesIO and immediately load into memory to close the buffer
+        with Image.open(BytesIO(response.content)) as temp_img:
+            # Create a copy in memory to avoid keeping BytesIO reference
+            img = temp_img.copy()
     else:
         logger.error(f"Received non-200 response from {image_url}: status_code: {response.status_code}")
     return img
@@ -27,7 +30,11 @@ def change_orientation(image, orientation, inverted=False):
     if inverted:
         angle = (angle + 180) % 360
 
-    return image.rotate(angle, expand=1)
+    # Only rotate if angle is non-zero
+    if angle == 0:
+        return image
+    else:
+        return image.rotate(angle, expand=1)
 
 def resize_image(image, desired_size, image_settings=[]):
     img_width, img_height = image.size
@@ -55,32 +62,84 @@ def resize_image(image, desired_size, image_settings=[]):
             y_offset = (img_height - new_height) // 2
 
     # Step 2: Crop the image
-    image = image.crop((x_offset, y_offset, x_offset + new_width, y_offset + new_height))
+    cropped = image.crop((x_offset, y_offset, x_offset + new_width, y_offset + new_height))
 
     # Step 3: Resize to the exact desired dimensions (if necessary)
-    return image.resize((desired_width, desired_height), Image.LANCZOS)
+    resized = cropped.resize((desired_width, desired_height), Image.LANCZOS)
+
+    # Close intermediate cropped image if it's different from input and output
+    if cropped is not image and cropped is not resized:
+        try:
+            cropped.close()
+        except:
+            pass
+
+    return resized
 
 def apply_image_enhancement(img, image_settings={}):
+    original_img = img
 
-    # Apply Brightness
-    img = ImageEnhance.Brightness(img).enhance(image_settings.get("brightness", 1.0))
+    # Apply Brightness - creates new image
+    brightness_val = image_settings.get("brightness", 1.0)
+    if brightness_val != 1.0:
+        prev_img = img
+        img = ImageEnhance.Brightness(img).enhance(brightness_val)
+        if prev_img is not original_img:
+            try:
+                prev_img.close()
+            except:
+                pass
 
-    # Apply Contrast
-    img = ImageEnhance.Contrast(img).enhance(image_settings.get("contrast", 1.0))
+    # Apply Contrast - creates new image
+    contrast_val = image_settings.get("contrast", 1.0)
+    if contrast_val != 1.0:
+        prev_img = img
+        img = ImageEnhance.Contrast(img).enhance(contrast_val)
+        if prev_img is not original_img:
+            try:
+                prev_img.close()
+            except:
+                pass
 
-    # Apply Saturation (Color)
-    img = ImageEnhance.Color(img).enhance(image_settings.get("saturation", 1.0))
+    # Apply Saturation (Color) - creates new image
+    saturation_val = image_settings.get("saturation", 1.0)
+    if saturation_val != 1.0:
+        prev_img = img
+        img = ImageEnhance.Color(img).enhance(saturation_val)
+        if prev_img is not original_img:
+            try:
+                prev_img.close()
+            except:
+                pass
 
-    # Apply Sharpness
-    img = ImageEnhance.Sharpness(img).enhance(image_settings.get("sharpness", 1.0))
+    # Apply Sharpness - creates new image
+    sharpness_val = image_settings.get("sharpness", 1.0)
+    if sharpness_val != 1.0:
+        prev_img = img
+        img = ImageEnhance.Sharpness(img).enhance(sharpness_val)
+        if prev_img is not original_img:
+            try:
+                prev_img.close()
+            except:
+                pass
 
     return img
 
 def compute_image_hash(image):
     """Compute SHA-256 hash of an image."""
-    image = image.convert("RGB")
-    img_bytes = image.tobytes()
-    return hashlib.sha256(img_bytes).hexdigest()
+    # Convert to RGB if needed - this may create a new image
+    rgb_image = image.convert("RGB")
+    img_bytes = rgb_image.tobytes()
+    hash_value = hashlib.sha256(img_bytes).hexdigest()
+
+    # Close the RGB image if it's different from the original
+    if rgb_image is not image:
+        try:
+            rgb_image.close()
+        except:
+            pass
+
+    return hash_value
 
 def take_screenshot_html(html_str, dimensions, timeout_ms=None):
     image = None
